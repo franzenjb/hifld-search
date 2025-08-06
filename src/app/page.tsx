@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import SearchBar from '@/components/SearchBar'
 import SearchResults from '@/components/SearchResults'
 import MapView from '@/components/MapView'
@@ -82,15 +82,6 @@ export default function Home() {
                   Clear All
                 </button>
               </div>
-              
-              
-              {/* <div className="flex gap-2 mb-3">
-                <ExportMapButton 
-                  layers={selectedLayers} 
-                  viewRef={mapViewRef.current}
-                />
-              </div> */}
-              
               <div className="space-y-1 max-h-32 overflow-y-auto">
                 {selectedLayers.map((layer) => (
                   <div key={layer.name} className="flex items-center justify-between text-sm">
