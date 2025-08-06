@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import SearchBar from '@/components/SearchBar'
 import SearchResults from '@/components/SearchResults'
 import MapView from '@/components/MapView'
@@ -13,7 +13,6 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<Layer[]>([])
   const [selectedLayers, setSelectedLayers] = useState<Layer[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const mapViewRef = useRef<any>(null)
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query)
@@ -87,14 +86,14 @@ export default function Home() {
               </div>
               
               <div className="flex gap-2 mb-3">
-                <ExportMapButton 
+                {/* <ExportMapButton 
                   layers={selectedLayers} 
                   viewRef={mapViewRef.current}
-                />
-                <SaveMapButton 
+                /> */}
+                {/* <SaveMapButton 
                   layers={selectedLayers} 
                   viewRef={mapViewRef.current}
-                />
+                /> */}
               </div>
               
               <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -115,7 +114,7 @@ export default function Home() {
         </aside>
 
         <main className="flex-1 relative">
-          <MapView ref={mapViewRef} layers={selectedLayers} />
+          <MapView layers={selectedLayers} />
         </main>
       </div>
     </div>
