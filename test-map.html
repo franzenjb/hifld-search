@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Test HIFLD Layers</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css" />
+  <script src="https://js.arcgis.com/4.28/"></script>
+  <style>
+    html, body, #viewDiv {
+      padding: 0;
+      margin: 0;
+      height: 100%;
+      width: 100%;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      max-width: 300px;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewDiv"></div>
+  <div id="info">
+    <h3>Test Layers</h3>
+    <button id="addEMS">Add EMS Stations</button>
+    <button id="addFire">Add Fire Perimeters</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/FeatureLayer",
+      "esri/PopupTemplate"
+    ], function(Map, MapView, FeatureLayer, PopupTemplate) {
+      
+      const map = new Map({
+        basemap: "streets-navigation-vector"
+      });
+
+      const view = new MapView({
+        container: "viewDiv",
+        map: map,
+        center: [-98.5795, 39.8283],
+        zoom: 4
+      });
+
+      const status = document.getElementById('status');
+
+      // Test EMS layer
+      document.getElementById('addEMS').addEventListener('click', () => {
+        const emsLayer = new FeatureLayer({
+          url: "https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services/Emergency_Medical_Service_(EMS)_Stations_gdb/FeatureServer/0",
+          popupTemplate: {
+            title: "{NAME}",
+            content: "Click worked! This is {NAME} in {CITY}, {STATE}"
+          }
+        });
+        
+        map.add(emsLayer);
+        status.innerHTML = "EMS layer added";
+      });
+
+      // Test Fire perimeters
+      document.getElementById('addFire').addEventListener('click', () => {
+        const fireLayer = new FeatureLayer({
+          url: "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/Current_WildlandFire_Perimeters/FeatureServer/0",
+          popupTemplate: {
+            title: "Fire Perimeter",
+            content: "Polygon clicked! Attributes: {*}"
+          }
+        });
+        
+        fireLayer.on("layerview-create", () => {
+          status.innerHTML = "Fire layer loaded successfully";
+        });
+        
+        fireLayer.on("layerview-create-error", (event) => {
+          status.innerHTML = "Fire layer error: " + event.error;
+          console.error(event.error);
+        });
+        
+        map.add(fireLayer);
+      });
+
+    });
+  </script>
+</body>
+</html>

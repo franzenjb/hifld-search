@@ -171,33 +171,6 @@ export default function MapView({ layers }: MapViewProps) {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
           try {
-            // Create simple popup template
-            const popupTemplate = new PopupTemplate.default({
-              title: (feature: any) => {
-                const attrs = feature.graphic.attributes
-                return attrs.NAME || attrs.name || attrs.FIRE_NAME || attrs.fire_name || 
-                       attrs.INCIDENT_NAME || attrs.incident_name || attrs.FACILITY_NAME || 
-                       attrs.facility_name || layer.name
-              },
-              content: [{
-                type: "fields",
-                fieldInfos: [
-                  { fieldName: "FIRE_NAME", label: "Fire Name" },
-                  { fieldName: "INCIDENT_NAME", label: "Incident Name" },
-                  { fieldName: "ACRES", label: "Acres" },
-                  { fieldName: "AREA", label: "Area" },
-                  { fieldName: "PERIMETER", label: "Perimeter" },
-                  { fieldName: "DATE", label: "Date" },
-                  { fieldName: "START_DATE", label: "Start Date" },
-                  { fieldName: "END_DATE", label: "End Date" },
-                  { fieldName: "STATUS", label: "Status" },
-                  { fieldName: "COUNTY", label: "County" },
-                  { fieldName: "*", label: "*" }
-                ]
-              }],
-              outFields: ["*"]
-            })
-
             // First, create a basic feature layer to check geometry type
             const tempLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
@@ -208,6 +181,18 @@ export default function MapView({ layers }: MapViewProps) {
             await tempLayer.load()
             const geometryType = tempLayer.geometryType
             console.log(`Layer ${layer.name} loaded, geometry type:`, geometryType)
+
+            // Create simple popup template that works for all geometries
+            const popupTemplate = new PopupTemplate.default({
+              title: layer.name,
+              content: `
+                <b>Layer:</b> ${layer.name}<br>
+                <b>Agency:</b> ${layer.agency}<br>
+                <hr>
+                {*}
+              `,
+              outFields: ["*"]
+            })
 
             // Create appropriate renderer based on geometry type
             let renderer
@@ -241,6 +226,11 @@ export default function MapView({ layers }: MapViewProps) {
               popupTemplate: popupTemplate,
               outFields: ["*"],
               renderer: renderer
+            })
+
+            // Add error handling for layer
+            featureLayer.on("layerview-create-error", (event) => {
+              console.error(`Layer failed to create view: ${layer.name}`, event.error)
             })
 
             viewRef.current.map.add(featureLayer)
