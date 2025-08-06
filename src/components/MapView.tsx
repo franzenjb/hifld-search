@@ -13,6 +13,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
   const layerRefsRef = useRef<Map<string, any>>(new Map())
   const [widgetsLoaded, setWidgetsLoaded] = useState(false)
   const [mapInitialized, setMapInitialized] = useState(false)
+  const [loadingLayers, setLoadingLayers] = useState<string[]>([])
 
   // Expose the view reference to parent components
   useImperativeHandle(ref, () => viewRef.current)
@@ -190,6 +191,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
           if (!currentLayerNames.has(layerName)) {
             viewRef.current.map.remove(layerRef)
             layerRefsRef.current.delete(layerName)
+            setLoadingLayers(prev => prev.filter(name => name !== layerName))
           }
         })
 
@@ -197,151 +199,85 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
         for (const layer of layers) {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
+          // Add to loading state
+          setLoadingLayers(prev => [...prev, layer.name])
+
           try {
-            // First, create a basic feature layer to check geometry type
-            const tempLayer = new FeatureLayer.default({
+            // Create a promise that times out after 10 seconds
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('Layer load timeout')), 10000)
+            })
+
+            // Create the feature layer without loading it first
+            const featureLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
-              outFields: ["*"]
-            })
-
-            // Load the layer to get its properties
-            await tempLayer.load()
-            const geometryType = tempLayer.geometryType
-            console.log(`Layer ${layer.name} loaded, geometry type:`, geometryType)
-
-            // Create popup template with dynamic content
-            const popupTemplate = new PopupTemplate.default({
-              title: "{poly_IncidentName} {NAME} {name} {FIRE_NAME}",
-              content: (feature: any) => {
-                const attrs = feature.graphic.attributes
-                console.log('Feature attributes:', attrs)
-                
-                // Build dynamic content based on actual attributes
-                let content = '<div style="font-family: sans-serif; padding: 10px;">'
-                
-                // Helper function to format dates
-                const formatDate = (value: any) => {
-                  if (!value || value === 'null') return 'Not available'
-                  // Handle Unix timestamp (milliseconds)
-                  if (typeof value === 'number' && value > 1000000000000) {
-                    return new Date(value).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })
-                  }
-                  // Handle date strings
-                  if (typeof value === 'string') {
-                    const date = new Date(value)
-                    if (!isNaN(date.getTime())) {
-                      return date.toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })
-                    }
-                  }
-                  return value
-                }
-                
-                // Priority fields for fire data
-                const fireFields = [
-                  { field: 'poly_IncidentName', label: 'Incident Name' },
-                  { field: 'poly_Acres', label: 'Acres', format: (v: any) => v ? Number(v).toLocaleString() : 'N/A' },
-                  { field: 'poly_GISAcres', label: 'GIS Acres', format: (v: any) => v ? Number(v).toLocaleString() : 'N/A' },
-                  { field: 'attr_ContainmentDateTime', label: 'Containment Date', format: formatDate },
-                  { field: 'attr_PercentContained', label: 'Percent Contained', format: (v: any) => v ? `${v}%` : 'N/A' },
-                  { field: 'attr_FireDiscoveryDateTime', label: 'Discovery Date', format: formatDate },
-                  { field: 'County', label: 'County' },
-                  { field: 'State', label: 'State' }
-                ]
-                
-                // Check for fire-specific fields first
-                let hasFireData = false
-                fireFields.forEach(({field, label, format}) => {
-                  if (attrs[field] !== undefined && attrs[field] !== null) {
-                    const value = format ? format(attrs[field]) : attrs[field]
-                    content += `<p><strong>${label}:</strong> ${value}</p>`
-                    hasFireData = true
-                  }
-                })
-                
-                // If no fire fields found, show all non-null attributes
-                if (!hasFireData) {
-                  content += '<table style="width: 100%; border-collapse: collapse;">'
-                  for (const [key, value] of Object.entries(attrs)) {
-                    if (value && value !== 'null' && 
-                        !key.startsWith('OBJECTID') && 
-                        !key.startsWith('Shape') &&
-                        !key.startsWith('FID')) {
-                      content += `
-                        <tr>
-                          <td style="padding: 4px; font-weight: bold; vertical-align: top;">${key}:</td>
-                          <td style="padding: 4px;">${value}</td>
-                        </tr>
-                      `
-                    }
-                  }
-                  content += '</table>'
-                }
-                
-                content += `
-                  <hr style="margin: 10px 0;">
-                  <p style="font-size: 12px; color: #666;">
-                    <strong>Layer:</strong> ${layer.name}<br>
-                    <strong>Agency:</strong> ${layer.agency}
-                  </p>
-                </div>`
-                
-                return content
-              },
-              outFields: ["*"]
-            })
-
-            // Create appropriate renderer based on geometry type
-            let renderer
-            if (geometryType === 'point') {
-              renderer = new SimpleRenderer.default({
+              title: layer.name,
+              popupEnabled: true,
+              outFields: ["*"],
+              // Default renderer
+              renderer: new SimpleRenderer.default({
                 symbol: new SimpleMarkerSymbol.default({
                   size: 10,
-                  color: [220, 38, 38, 0.8], // Red color to match your EMS points
+                  color: [220, 38, 38, 0.8],
                   outline: {
                     color: [255, 255, 255, 1],
                     width: 1.5
                   }
                 })
               })
-            } else if (geometryType === 'polygon') {
-              renderer = new SimpleRenderer.default({
-                symbol: new SimpleFillSymbol.default({
-                  color: [51, 122, 183, 0.4],
-                  outline: {
-                    color: [51, 122, 183, 1],
-                    width: 2
-                  }
-                })
-              })
-            }
-
-            const featureLayer = new FeatureLayer.default({
-              url: layer.serviceUrl,
-              title: layer.name,
-              popupEnabled: true,
-              popupTemplate: popupTemplate,
-              outFields: ["*"],
-              renderer: renderer
             })
 
             // Add error handling for layer
             featureLayer.on("layerview-create-error", (event) => {
               console.error(`Layer failed to create view: ${layer.name}`, event.error)
+              setLoadingLayers(prev => prev.filter(name => name !== layer.name))
             })
 
+            // Add the layer immediately without waiting for it to load
             viewRef.current.map.add(featureLayer)
             layerRefsRef.current.set(layer.name, featureLayer)
             console.log(`Layer ${layer.name} added to map`)
+
+            // Load layer properties in background with timeout
+            Promise.race([
+              featureLayer.load(),
+              timeoutPromise
+            ]).then(() => {
+              // If layer loads successfully, update renderer based on geometry type
+              const geometryType = featureLayer.geometryType
+              console.log(`Layer ${layer.name} geometry type:`, geometryType)
+
+              if (geometryType === 'polygon') {
+                featureLayer.renderer = new SimpleRenderer.default({
+                  symbol: new SimpleFillSymbol.default({
+                    color: [51, 122, 183, 0.4],
+                    outline: {
+                      color: [51, 122, 183, 1],
+                      width: 2
+                    }
+                  })
+                })
+              }
+
+              // Add popup template
+              featureLayer.popupTemplate = new PopupTemplate.default({
+                title: layer.name,
+                content: [{
+                  type: "fields",
+                  fieldInfos: [{
+                    fieldName: "*"
+                  }]
+                }]
+              })
+            }).catch(error => {
+              console.warn(`Layer ${layer.name} load timeout/error, but layer may still display:`, error)
+            }).finally(() => {
+              setLoadingLayers(prev => prev.filter(name => name !== layer.name))
+            })
+
           } catch (error) {
             console.error(`Failed to add layer ${layer.name}:`, error)
+            setLoadingLayers(prev => prev.filter(name => name !== layer.name))
           }
         }
       } catch (error) {
@@ -365,7 +301,13 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
         </div>
       )}
       
-      {!widgetsLoaded && layers.length > 0 && mapInitialized && (
+      {loadingLayers.length > 0 && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-4 py-2 rounded shadow">
+          <p className="text-sm text-gray-600">Loading layer: {loadingLayers[0]}...</p>
+        </div>
+      )}
+      
+      {!widgetsLoaded && layers.length > 0 && mapInitialized && loadingLayers.length === 0 && (
         <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-4 py-2 rounded shadow">
           <p className="text-sm text-gray-600">Loading map controls...</p>
         </div>
