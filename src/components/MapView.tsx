@@ -13,7 +13,6 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
   const layerRefsRef = useRef<Map<string, any>>(new Map())
   const [widgetsLoaded, setWidgetsLoaded] = useState(false)
   const [mapInitialized, setMapInitialized] = useState(false)
-  const [loadingLayers, setLoadingLayers] = useState<string[]>([])
 
   // Expose the view reference to parent components
   useImperativeHandle(ref, () => viewRef.current)
@@ -175,9 +174,8 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
 
     const updateLayers = async () => {
       try {
-        const [FeatureLayer, PopupTemplate, SimpleRenderer, SimpleMarkerSymbol, SimpleFillSymbol] = await Promise.all([
+        const [FeatureLayer, SimpleRenderer, SimpleMarkerSymbol, SimpleFillSymbol] = await Promise.all([
           import('@arcgis/core/layers/FeatureLayer'),
-          import('@arcgis/core/PopupTemplate'),
           import('@arcgis/core/renderers/SimpleRenderer'),
           import('@arcgis/core/symbols/SimpleMarkerSymbol'),
           import('@arcgis/core/symbols/SimpleFillSymbol')
@@ -191,7 +189,6 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
           if (!currentLayerNames.has(layerName)) {
             viewRef.current.map.remove(layerRef)
             layerRefsRef.current.delete(layerName)
-            setLoadingLayers(prev => prev.filter(name => name !== layerName))
           }
         })
 
@@ -199,22 +196,19 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
         for (const layer of layers) {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
-          // Add to loading state
-          setLoadingLayers(prev => [...prev, layer.name])
-
           try {
-            // Create a promise that times out after 10 seconds
-            const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Layer load timeout')), 10000)
-            })
-
-            // Create the feature layer without loading it first
+            // Create feature layer with simple defaults - NO pre-loading
             const featureLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
               title: layer.name,
               popupEnabled: true,
               outFields: ["*"],
-              // Default renderer
+              // Simple popup template
+              popupTemplate: {
+                title: layer.name,
+                content: `<p>Layer: ${layer.name}</p><p>Agency: ${layer.agency}</p><p>{*}</p>`
+              },
+              // Default renderer for all types
               renderer: new SimpleRenderer.default({
                 symbol: new SimpleMarkerSymbol.default({
                   size: 10,
@@ -230,54 +224,15 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
             // Add error handling for layer
             featureLayer.on("layerview-create-error", (event) => {
               console.error(`Layer failed to create view: ${layer.name}`, event.error)
-              setLoadingLayers(prev => prev.filter(name => name !== layer.name))
             })
 
-            // Add the layer immediately without waiting for it to load
+            // Add the layer immediately
             viewRef.current.map.add(featureLayer)
             layerRefsRef.current.set(layer.name, featureLayer)
             console.log(`Layer ${layer.name} added to map`)
 
-            // Load layer properties in background with timeout
-            Promise.race([
-              featureLayer.load(),
-              timeoutPromise
-            ]).then(() => {
-              // If layer loads successfully, update renderer based on geometry type
-              const geometryType = featureLayer.geometryType
-              console.log(`Layer ${layer.name} geometry type:`, geometryType)
-
-              if (geometryType === 'polygon') {
-                featureLayer.renderer = new SimpleRenderer.default({
-                  symbol: new SimpleFillSymbol.default({
-                    color: [51, 122, 183, 0.4],
-                    outline: {
-                      color: [51, 122, 183, 1],
-                      width: 2
-                    }
-                  })
-                })
-              }
-
-              // Add popup template
-              featureLayer.popupTemplate = new PopupTemplate.default({
-                title: layer.name,
-                content: [{
-                  type: "fields",
-                  fieldInfos: [{
-                    fieldName: "*"
-                  }]
-                }]
-              })
-            }).catch(error => {
-              console.warn(`Layer ${layer.name} load timeout/error, but layer may still display:`, error)
-            }).finally(() => {
-              setLoadingLayers(prev => prev.filter(name => name !== layer.name))
-            })
-
           } catch (error) {
             console.error(`Failed to add layer ${layer.name}:`, error)
-            setLoadingLayers(prev => prev.filter(name => name !== layer.name))
           }
         }
       } catch (error) {
@@ -298,18 +253,6 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
             <h3 className="text-xl font-semibold mb-2">No layers selected</h3>
             <p className="text-gray-600">Search for infrastructure and add layers to the map</p>
           </div>
-        </div>
-      )}
-      
-      {loadingLayers.length > 0 && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-4 py-2 rounded shadow">
-          <p className="text-sm text-gray-600">Loading layer: {loadingLayers[0]}...</p>
-        </div>
-      )}
-      
-      {!widgetsLoaded && layers.length > 0 && mapInitialized && loadingLayers.length === 0 && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-4 py-2 rounded shadow">
-          <p className="text-sm text-gray-600">Loading map controls...</p>
         </div>
       )}
     </div>
