@@ -173,10 +173,25 @@ export default function MapView({ layers }: MapViewProps) {
           try {
             // Create simple popup template
             const popupTemplate = new PopupTemplate.default({
-              title: "{NAME} {name} {FACILITY_NAME} {facility_name} {SITE_NAME} {site_name}",
+              title: (feature: any) => {
+                const attrs = feature.graphic.attributes
+                return attrs.NAME || attrs.name || attrs.FIRE_NAME || attrs.fire_name || 
+                       attrs.INCIDENT_NAME || attrs.incident_name || attrs.FACILITY_NAME || 
+                       attrs.facility_name || layer.name
+              },
               content: [{
                 type: "fields",
                 fieldInfos: [
+                  { fieldName: "FIRE_NAME", label: "Fire Name" },
+                  { fieldName: "INCIDENT_NAME", label: "Incident Name" },
+                  { fieldName: "ACRES", label: "Acres" },
+                  { fieldName: "AREA", label: "Area" },
+                  { fieldName: "PERIMETER", label: "Perimeter" },
+                  { fieldName: "DATE", label: "Date" },
+                  { fieldName: "START_DATE", label: "Start Date" },
+                  { fieldName: "END_DATE", label: "End Date" },
+                  { fieldName: "STATUS", label: "Status" },
+                  { fieldName: "COUNTY", label: "County" },
                   { fieldName: "*", label: "*" }
                 ]
               }],
