@@ -96,11 +96,12 @@ export default function MapView({ layers }: MapViewProps) {
 
     const updateLayers = async () => {
       try {
-        const [FeatureLayer, PopupTemplate, SimpleRenderer, SimpleMarkerSymbol] = await Promise.all([
+        const [FeatureLayer, PopupTemplate, SimpleRenderer, SimpleMarkerSymbol, SimpleFillSymbol] = await Promise.all([
           import('@arcgis/core/layers/FeatureLayer'),
           import('@arcgis/core/PopupTemplate'),
           import('@arcgis/core/renderers/SimpleRenderer'),
-          import('@arcgis/core/symbols/SimpleMarkerSymbol')
+          import('@arcgis/core/symbols/SimpleMarkerSymbol'),
+          import('@arcgis/core/symbols/SimpleFillSymbol')
         ])
         
         // Get current layer names
@@ -119,17 +120,36 @@ export default function MapView({ layers }: MapViewProps) {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
           try {
+            // First, create a basic feature layer to check geometry type
+            const tempLayer = new FeatureLayer.default({
+              url: layer.serviceUrl,
+              outFields: ["*"]
+            })
+
+            // Load the layer to get its properties
+            await tempLayer.load()
+            const geometryType = tempLayer.geometryType
+            console.log(`Layer ${layer.name} loaded, geometry type:`, geometryType)
+
             // Create custom popup template
             const popupTemplate = new PopupTemplate.default({
-              title: "{NAME} {name} {FACILITY_NAME} {facility_name} {SITE_NAME} {site_name}",
+              title: layer.name,
               content: async (feature: any) => {
                 const attributes = feature.graphic.attributes
                 console.log('Popup triggered for attributes:', attributes)
                 
-                // Get the actual title
-                const title = attributes.NAME || attributes.name || attributes.FACILITY_NAME || 
-                             attributes.facility_name || attributes.SITE_NAME || attributes.site_name ||
-                             attributes.FACNAME || attributes.facname || layer.name
+                // Get the best available title
+                const possibleTitleFields = ['NAME', 'name', 'FACILITY_NAME', 'facility_name', 
+                                           'SITE_NAME', 'site_name', 'FACNAME', 'facname',
+                                           'FIRE_NAME', 'fire_name', 'INCIDENT_NAME', 'incident_name']
+                
+                let title = layer.name
+                for (const field of possibleTitleFields) {
+                  if (attributes[field]) {
+                    title = attributes[field]
+                    break
+                  }
+                }
                 
                 // Create a nicely formatted HTML content
                 let content = `
@@ -148,33 +168,37 @@ export default function MapView({ layers }: MapViewProps) {
                 
                 // Add key attributes in a clean format
                 const importantFields = ['ADDRESS', 'CITY', 'STATE', 'ZIP', 'PHONE', 'WEBSITE', 
-                                       'STATUS', 'TYPE', 'CATEGORY', 'OWNER', 'OPERATOR', 'COUNTY']
+                                       'STATUS', 'TYPE', 'CATEGORY', 'OWNER', 'OPERATOR', 'COUNTY',
+                                       'ACRES', 'AREA', 'PERIMETER', 'DATE', 'START_DATE', 'END_DATE']
                 
-                let hasImportantFields = false
-                let displayedFields = new Set(['NAME', 'name', 'FACILITY_NAME', 'facility_name', 
-                                               'SITE_NAME', 'site_name', 'FACNAME', 'facname'])
+                let displayedCount = 0
+                const displayedFields = new Set<string>()
                 
+                // First, show important fields
                 for (const field of importantFields) {
-                  const fieldLower = field.toLowerCase()
-                  const value = attributes[field] || attributes[fieldLower]
-                  if (value && value !== 'null' && value !== 'NULL' && value !== 'Null') {
-                    hasImportantFields = true
-                    displayedFields.add(field)
-                    displayedFields.add(fieldLower)
-                    content += `
-                      <p style="margin: 8px 0; font-size: 14px;">
-                        <strong style="color: #374151;">${field.charAt(0) + field.slice(1).toLowerCase()}:</strong>
-                        <span style="color: #4b5563; margin-left: 8px;">${value}</span>
-                      </p>
-                    `
+                  const variations = [field, field.toLowerCase(), field.replace(/_/g, '')]
+                  for (const variant of variations) {
+                    if (attributes[variant] && !displayedFields.has(variant)) {
+                      const value = attributes[variant]
+                      if (value && value !== 'null' && value !== 'NULL' && value !== 'Null') {
+                        displayedFields.add(variant)
+                        content += `
+                          <p style="margin: 8px 0; font-size: 14px;">
+                            <strong style="color: #374151;">${field.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase())}:</strong>
+                            <span style="color: #4b5563; margin-left: 8px;">${value}</span>
+                          </p>
+                        `
+                        displayedCount++
+                        break
+                      }
+                    }
                   }
                 }
                 
-                // If no important fields found, show first 5 non-null attributes
-                if (!hasImportantFields) {
-                  let count = 0
+                // If we haven't shown enough fields, add some more
+                if (displayedCount < 5) {
                   for (const [key, value] of Object.entries(attributes)) {
-                    if (count >= 5) break
+                    if (displayedCount >= 8) break
                     if (value && value !== 'null' && value !== 'NULL' && 
                         !key.startsWith('OBJECTID') && !key.startsWith('Shape') &&
                         !key.startsWith('FID') && !displayedFields.has(key)) {
@@ -184,7 +208,7 @@ export default function MapView({ layers }: MapViewProps) {
                           <span style="color: #4b5563; margin-left: 8px;">${value}</span>
                         </p>
                       `
-                      count++
+                      displayedCount++
                     }
                   }
                 }
@@ -193,7 +217,7 @@ export default function MapView({ layers }: MapViewProps) {
                     </div>
                     <div style="padding: 12px 0; border-top: 1px solid #e5e7eb;">
                       <p style="margin: 0; font-size: 12px; color: #9ca3af;">
-                        Total attributes: ${Object.keys(attributes).length}
+                        Feature type: ${geometryType} | Total attributes: ${Object.keys(attributes).length}
                       </p>
                     </div>
                   </div>
@@ -204,30 +228,39 @@ export default function MapView({ layers }: MapViewProps) {
               outFields: ["*"]
             })
 
-            // Create a more visible renderer for point features
-            const renderer = new SimpleRenderer.default({
-              symbol: new SimpleMarkerSymbol.default({
-                size: 10,
-                color: [51, 122, 183, 0.8],
-                outline: {
-                  color: [255, 255, 255, 1],
-                  width: 2
-                }
+            // Create appropriate renderer based on geometry type
+            let renderer
+            if (geometryType === 'point') {
+              renderer = new SimpleRenderer.default({
+                symbol: new SimpleMarkerSymbol.default({
+                  size: 10,
+                  color: [51, 122, 183, 0.8],
+                  outline: {
+                    color: [255, 255, 255, 1],
+                    width: 2
+                  }
+                })
               })
-            })
+            } else if (geometryType === 'polygon') {
+              renderer = new SimpleRenderer.default({
+                symbol: new SimpleFillSymbol.default({
+                  color: [51, 122, 183, 0.4],
+                  outline: {
+                    color: [51, 122, 183, 1],
+                    width: 2
+                  }
+                })
+              })
+            }
 
             const featureLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
               title: layer.name,
               popupEnabled: true,
               popupTemplate: popupTemplate,
-              outFields: ["*"], // Request all fields
-              renderer: renderer // Make points more visible
+              outFields: ["*"],
+              renderer: renderer
             })
-
-            // Wait for layer to load
-            await featureLayer.load()
-            console.log(`Layer ${layer.name} loaded, geometry type:`, featureLayer.geometryType)
 
             viewRef.current.map.add(featureLayer)
             layerRefsRef.current.set(layer.name, featureLayer)
