@@ -31,7 +31,7 @@ export default function MapView({ layers }: MapViewProps) {
 
     const initializeMap = async () => {
       try {
-        const [Map, MapView, FeatureLayer, Basemap, esriConfig, Home, Legend, Search] = await Promise.all([
+        const [Map, MapView, FeatureLayer, Basemap, esriConfig, Home, Legend, Search, Expand] = await Promise.all([
           import('@arcgis/core/Map'),
           import('@arcgis/core/views/MapView'),
           import('@arcgis/core/layers/FeatureLayer'),
@@ -40,6 +40,7 @@ export default function MapView({ layers }: MapViewProps) {
           import('@arcgis/core/widgets/Home'),
           import('@arcgis/core/widgets/Legend'),
           import('@arcgis/core/widgets/Search'),
+          import('@arcgis/core/widgets/Expand'),
         ])
 
         if (!isMounted) return
@@ -69,11 +70,16 @@ export default function MapView({ layers }: MapViewProps) {
           }
         })
 
+        // Wait for view to be ready
+        await view.when()
+        console.log('View ready, adding widgets...')
+
         // Add Home widget
         const homeWidget = new Home.default({
           view: view
         })
         view.ui.add(homeWidget, 'top-left')
+        console.log('Home widget added')
 
         // Add Search widget
         const searchWidget = new Search.default({
@@ -86,18 +92,23 @@ export default function MapView({ layers }: MapViewProps) {
           position: 'top-right',
           index: 0
         })
+        console.log('Search widget added')
 
-        // Add Legend widget
+        // Add Legend widget inside an Expand widget
         const legend = new Legend.default({
-          view: view,
-          container: document.createElement('div')
+          view: view
         })
-        view.ui.add(legend, 'bottom-left')
+        const legendExpand = new Expand.default({
+          expandIconClass: "esri-icon-layer-list",
+          expandTooltip: "Legend",
+          view: view,
+          content: legend,
+          expanded: false
+        })
+        view.ui.add(legendExpand, 'bottom-left')
+        console.log('Legend widget added')
 
         viewRef.current = view
-
-        // Wait for view to be ready
-        await view.when()
 
         // Add click event to show coordinates if no features found
         view.on('click', (event: any) => {
@@ -148,105 +159,91 @@ export default function MapView({ layers }: MapViewProps) {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
           try {
-            // Create custom popup template with fixed content
+            // Create custom popup template with simple content
             const popupTemplate = new PopupTemplate.default({
               title: layer.name,
-              content: [{
-                type: "custom",
-                creator: (feature: any) => {
-                  const div = document.createElement("div")
-                  const attributes = feature.graphic.attributes
-                  console.log('Popup triggered for attributes:', attributes)
-                  
-                  // Get the best available title
-                  const possibleTitleFields = ['NAME', 'name', 'FACILITY_NAME', 'facility_name', 
-                                             'SITE_NAME', 'site_name', 'FACNAME', 'facname',
-                                             'FIRE_NAME', 'fire_name', 'INCIDENT_NAME', 'incident_name']
-                  
-                  let title = layer.name
-                  for (const field of possibleTitleFields) {
-                    if (attributes[field]) {
-                      title = attributes[field]
-                      break
-                    }
+              content: (feature: any) => {
+                const attributes = feature.graphic.attributes
+                console.log('Popup triggered for attributes:', attributes)
+                
+                // Get the best available title
+                const possibleTitleFields = ['NAME', 'name', 'FACILITY_NAME', 'facility_name', 
+                                           'SITE_NAME', 'site_name', 'FACNAME', 'facname',
+                                           'FIRE_NAME', 'fire_name', 'INCIDENT_NAME', 'incident_name']
+                
+                let title = layer.name
+                for (const field of possibleTitleFields) {
+                  if (attributes[field]) {
+                    title = attributes[field]
+                    break
                   }
-                  
-                  // Create nicely formatted HTML content
-                  let htmlContent = `
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-width: 300px;">
-                      <div style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
-                        <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #111827;">${title}</h3>
-                        <p style="margin: 0; font-size: 14px; color: #6b7280;">
-                          <strong>Layer:</strong> ${layer.name}
-                        </p>
-                        <p style="margin: 4px 0 0 0; font-size: 14px; color: #6b7280;">
-                          <strong>Agency:</strong> ${layer.agency}
-                        </p>
-                      </div>
-                      <div style="padding: 12px 0;">
-                  `
-                  
-                  // Add key attributes in a clean format
-                  const importantFields = ['ADDRESS', 'CITY', 'STATE', 'ZIP', 'PHONE', 'WEBSITE', 
-                                         'STATUS', 'TYPE', 'CATEGORY', 'OWNER', 'OPERATOR', 'COUNTY',
-                                         'ACRES', 'AREA', 'PERIMETER', 'DATE', 'START_DATE', 'END_DATE']
-                  
-                  let displayedCount = 0
-                  const displayedFields = new Set<string>()
-                  
-                  // First, show important fields
-                  for (const field of importantFields) {
-                    const variations = [field, field.toLowerCase(), field.replace(/_/g, '')]
-                    for (const variant of variations) {
-                      if (attributes[variant] && !displayedFields.has(variant)) {
-                        const value = attributes[variant]
-                        if (value && value !== 'null' && value !== 'NULL' && value !== 'Null') {
-                          displayedFields.add(variant)
-                          htmlContent += `
-                            <p style="margin: 8px 0; font-size: 14px;">
-                              <strong style="color: #374151;">${field.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase())}:</strong>
-                              <span style="color: #4b5563; margin-left: 8px;">${value}</span>
-                            </p>
-                          `
-                          displayedCount++
-                          break
-                        }
-                      }
-                    }
-                  }
-                  
-                  // If we haven't shown enough fields, add some more
-                  if (displayedCount < 5) {
-                    for (const [key, value] of Object.entries(attributes)) {
-                      if (displayedCount >= 8) break
-                      if (value && value !== 'null' && value !== 'NULL' && 
-                          !key.startsWith('OBJECTID') && !key.startsWith('Shape') &&
-                          !key.startsWith('FID') && !displayedFields.has(key)) {
-                        htmlContent += `
-                          <p style="margin: 8px 0; font-size: 14px;">
-                            <strong style="color: #374151;">${key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase())}:</strong>
-                            <span style="color: #4b5563; margin-left: 8px;">${value}</span>
-                          </p>
+                }
+                
+                // Create simple table for attributes
+                let content = `<div style="padding: 10px;">
+                  <h3 style="margin: 0 0 10px 0;">${title}</h3>
+                  <p><strong>Layer:</strong> ${layer.name}</p>
+                  <p><strong>Agency:</strong> ${layer.agency}</p>
+                  <hr style="margin: 10px 0;">
+                  <table style="width: 100%;">
+                `
+                
+                // Add key attributes
+                const importantFields = ['ADDRESS', 'CITY', 'STATE', 'ZIP', 'PHONE', 'WEBSITE', 
+                                       'STATUS', 'TYPE', 'CATEGORY', 'OWNER', 'OPERATOR', 'COUNTY',
+                                       'ACRES', 'AREA', 'PERIMETER', 'DATE', 'START_DATE', 'END_DATE']
+                
+                let displayedCount = 0
+                const displayedFields = new Set<string>()
+                
+                // Show important fields first
+                for (const field of importantFields) {
+                  const variations = [field, field.toLowerCase(), field.replace(/_/g, '')]
+                  for (const variant of variations) {
+                    if (attributes[variant] && !displayedFields.has(variant)) {
+                      const value = attributes[variant]
+                      if (value && value !== 'null' && value !== 'NULL' && value !== 'Null') {
+                        displayedFields.add(variant)
+                        content += `
+                          <tr>
+                            <td style="padding: 4px; font-weight: bold;">${field.replace(/_/g, ' ')}:</td>
+                            <td style="padding: 4px;">${value}</td>
+                          </tr>
                         `
                         displayedCount++
+                        break
                       }
                     }
                   }
-                  
-                  htmlContent += `
-                      </div>
-                      <div style="padding: 12px 0; border-top: 1px solid #e5e7eb;">
-                        <p style="margin: 0; font-size: 12px; color: #9ca3af;">
-                          Total attributes: ${Object.keys(attributes).length}
-                        </p>
-                      </div>
-                    </div>
-                  `
-                  
-                  div.innerHTML = htmlContent
-                  return div
                 }
-              }],
+                
+                // If we haven't shown enough fields, add some more
+                if (displayedCount < 5) {
+                  for (const [key, value] of Object.entries(attributes)) {
+                    if (displayedCount >= 8) break
+                    if (value && value !== 'null' && value !== 'NULL' && 
+                        !key.startsWith('OBJECTID') && !key.startsWith('Shape') &&
+                        !key.startsWith('FID') && !displayedFields.has(key)) {
+                      content += `
+                        <tr>
+                          <td style="padding: 4px; font-weight: bold;">${key.replace(/_/g, ' ')}:</td>
+                          <td style="padding: 4px;">${value}</td>
+                        </tr>
+                      `
+                      displayedCount++
+                    }
+                  }
+                }
+                
+                content += `
+                  </table>
+                  <p style="margin-top: 10px; font-size: 12px; color: #666;">
+                    Total attributes: ${Object.keys(attributes).length}
+                  </p>
+                </div>`
+                
+                return content
+              },
               outFields: ["*"]
             })
 
@@ -297,6 +294,7 @@ export default function MapView({ layers }: MapViewProps) {
 
             viewRef.current.map.add(featureLayer)
             layerRefsRef.current.set(layer.name, featureLayer)
+            console.log(`Layer ${layer.name} added to map`)
           } catch (error) {
             console.error(`Failed to add layer ${layer.name}:`, error)
           }
