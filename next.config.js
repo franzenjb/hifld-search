@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  env: {
-    NEXT_PUBLIC_ARCGIS_API_KEY: process.env.ARCGIS_API_KEY,
-  },
   async headers() {
     return [
       {
