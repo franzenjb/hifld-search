@@ -5,6 +5,7 @@ import SearchBar from '@/components/SearchBar'
 import SearchResults from '@/components/SearchResults'
 import MapView from '@/components/MapView'
 import SaveMapButton from '@/components/SaveMapButton'
+import ExportMapButton from '@/components/ExportMapButton'
 import { searchLayers, type Layer } from '@/lib/search'
 
 export default function Home() {
@@ -77,19 +78,25 @@ export default function Home() {
                 <h3 className="font-semibold text-gray-700">
                   Active Layers ({selectedLayers.length})
                 </h3>
-                <div className="flex items-center gap-2">
-                  <SaveMapButton 
-                    layers={selectedLayers} 
-                    viewRef={mapViewRef.current}
-                  />
-                  <button
-                    onClick={handleClearMap}
-                    className="text-sm text-red-600 hover:text-red-700"
-                  >
-                    Clear All
-                  </button>
-                </div>
+                <button
+                  onClick={handleClearMap}
+                  className="text-sm text-red-600 hover:text-red-700"
+                >
+                  Clear All
+                </button>
               </div>
+              
+              <div className="flex gap-2 mb-3">
+                <ExportMapButton 
+                  layers={selectedLayers} 
+                  viewRef={mapViewRef.current}
+                />
+                <SaveMapButton 
+                  layers={selectedLayers} 
+                  viewRef={mapViewRef.current}
+                />
+              </div>
+              
               <div className="space-y-1 max-h-32 overflow-y-auto">
                 {selectedLayers.map((layer) => (
                   <div key={layer.name} className="flex items-center justify-between text-sm">
