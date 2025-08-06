@@ -63,3 +63,5 @@ Add these in your Vercel project settings:
 - `ARCGIS_CLIENT_ID` 
 - `ARCGIS_CLIENT_SECRET`
 - `APP_PASSWORD` (optional, defaults to 'hifld2024')
+
+<!-- Last deployment verification: 2025-08-06 17:05 -->
