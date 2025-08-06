@@ -12,6 +12,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
   const viewRef = useRef<any>(null)
   const layerRefsRef = useRef<Map<string, any>>(new Map())
   const [widgetsLoaded, setWidgetsLoaded] = useState(false)
+  const [mapInitialized, setMapInitialized] = useState(false)
 
   // Expose the view reference to parent components
   useImperativeHandle(ref, () => viewRef.current)
@@ -24,22 +25,25 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
     document.head.appendChild(link)
 
     return () => {
-      document.head.removeChild(link)
+      if (document.head.contains(link)) {
+        document.head.removeChild(link)
+      }
     }
   }, [])
 
   useEffect(() => {
-    if (!mapRef.current) return
+    if (!mapRef.current || mapInitialized) return
 
     let isMounted = true
 
     const initializeMap = async () => {
       try {
         // Load core modules first
-        const [Map, MapView, esriConfig] = await Promise.all([
+        const [Map, MapView, esriConfig, Extent] = await Promise.all([
           import('@arcgis/core/Map'),
           import('@arcgis/core/views/MapView'),
           import('@arcgis/core/config'),
+          import('@arcgis/core/geometry/Extent'),
         ])
 
         if (!isMounted) return
@@ -54,11 +58,23 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
           basemap: 'streets-navigation-vector'
         })
 
+        // Define extent for continental US (excludes Alaska and Hawaii)
+        const continentalUSExtent = new Extent.default({
+          xmin: -130,
+          ymin: 24,
+          xmax: -65,
+          ymax: 50,
+          spatialReference: { wkid: 4326 }
+        })
+
         const view = new MapView.default({
           container: mapRef.current!,
           map: map,
-          center: [-98.5795, 39.8283], // Center of USA
-          zoom: 4,
+          extent: continentalUSExtent, // Use extent instead of center/zoom
+          constraints: {
+            minZoom: 3,
+            maxZoom: 18
+          },
           popup: {
             dockEnabled: true,
             dockOptions: {
@@ -70,61 +86,67 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
         })
 
         viewRef.current = view
+        setMapInitialized(true)
 
         // Wait for view to be ready
         await view.when()
         console.log('View ready')
 
-        // Load and add widgets after view is ready
-        setTimeout(async () => {
-          try {
-            const [Home, Legend, Search, Expand] = await Promise.all([
-              import('@arcgis/core/widgets/Home'),
-              import('@arcgis/core/widgets/Legend'),
-              import('@arcgis/core/widgets/Search'),
-              import('@arcgis/core/widgets/Expand'),
-            ])
+        // Load widgets immediately after view is ready
+        try {
+          const [Home, Legend, Search, Expand] = await Promise.all([
+            import('@arcgis/core/widgets/Home'),
+            import('@arcgis/core/widgets/Legend'),
+            import('@arcgis/core/widgets/Search'),
+            import('@arcgis/core/widgets/Expand'),
+          ])
 
-            // Add Home widget
-            const homeWidget = new Home.default({
-              view: view
-            })
-            view.ui.add(homeWidget, 'top-left')
-            console.log('Home widget added')
+          if (!isMounted) return
 
-            // Add Search widget
-            const searchWidget = new Search.default({
-              view: view,
-              includeDefaultSources: true,
-              locationEnabled: false,
-              popupEnabled: false
-            })
-            view.ui.add(searchWidget, {
-              position: 'top-right',
-              index: 0
-            })
-            console.log('Search widget added')
+          // Add Home widget with continental US extent
+          const homeWidget = new Home.default({
+            view: view,
+            viewpoint: {
+              targetGeometry: continentalUSExtent
+            }
+          })
+          view.ui.add(homeWidget, 'top-left')
+          console.log('Home widget added')
 
-            // Add Legend widget inside an Expand widget
-            const legend = new Legend.default({
-              view: view
-            })
-            const legendExpand = new Expand.default({
-              expandIcon: "legend",
-              expandTooltip: "Show Map Legend",
-              view: view,
-              content: legend,
-              expanded: false,
-              group: "bottom-left"
-            })
-            view.ui.add(legendExpand, 'bottom-left')
-            console.log('Legend widget added')
+          // Add Search widget
+          const searchWidget = new Search.default({
+            view: view,
+            includeDefaultSources: true,
+            locationEnabled: false,
+            popupEnabled: false
+          })
+          view.ui.add(searchWidget, {
+            position: 'top-right',
+            index: 0
+          })
+          console.log('Search widget added')
 
-            setWidgetsLoaded(true)
-          } catch (error) {
-            console.error('Failed to load widgets:', error)
-          }
-        }, 1000) // Delay widget loading
+          // Add Legend widget inside an Expand widget
+          const legend = new Legend.default({
+            view: view
+          })
+          const legendExpand = new Expand.default({
+            expandIcon: "legend",
+            expandTooltip: "Show Map Legend",
+            view: view,
+            content: legend,
+            expanded: false,
+            group: "bottom-left"
+          })
+          view.ui.add(legendExpand, 'bottom-left')
+          console.log('Legend widget added')
+
+          setWidgetsLoaded(true)
+        } catch (error) {
+          console.error('Failed to load widgets:', error)
+          // Set to true anyway to hide the loading message
+          setWidgetsLoaded(true)
+        }
 
         // Add click event to show coordinates if no features found
         view.on('click', (event: any) => {
@@ -132,6 +154,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
         })
       } catch (error) {
         console.error('Failed to initialize map:', error)
+        setMapInitialized(true) // Prevent infinite retries
       }
     }
 
@@ -144,10 +167,10 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
         viewRef.current = null
       }
     }
-  }, [])
+  }, [mapInitialized])
 
   useEffect(() => {
-    if (!viewRef.current) return
+    if (!viewRef.current || !mapInitialized) return
 
     const updateLayers = async () => {
       try {
@@ -327,7 +350,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
     }
 
     updateLayers()
-  }, [layers])
+  }, [layers, mapInitialized])
 
   return (
     <div className="relative h-full w-full">
@@ -342,7 +365,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
         </div>
       )}
       
-      {!widgetsLoaded && layers.length > 0 && (
+      {!widgetsLoaded && layers.length > 0 && mapInitialized && (
         <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-4 py-2 rounded shadow">
           <p className="text-sm text-gray-600">Loading map controls...</p>
         </div>
