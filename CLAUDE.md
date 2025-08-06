@@ -13,86 +13,35 @@ HIFLD (Homeland Infrastructure Foundation-Level Data) search and mapping tool fo
 4. **Map Visualization**: Interactive maps with selected layers using ArcGIS
 5. **Dual Implementation**: Modern web application + Jupyter notebook versions
 
-## Tech Stack & Architecture
+## Development Commands
 
-### Web Application (Primary Implementation)
-- **Framework**: Next.js 14 (React 18, TypeScript)
-- **Styling**: Tailwind CSS with custom components
-- **Mapping**: ArcGIS JavaScript API 4.28
-- **Data Processing**: Papa Parse for CSV handling
-- **Build System**: Next.js with ESLint, PostCSS
-- **Deployment**: Configured for Vercel
-
-### Python/Jupyter Implementation (Legacy/Research)
-- **Runtime**: ArcGIS Online Jupyter Notebooks
-- **Libraries**: ArcGIS Python API, pandas, ipywidgets
-- **Purpose**: Proof of concept and research environments
-
-## Key Files & Project Structure
-
-### Web Application Structure
-```
-src/
-├── app/
-│   ├── api/auth/route.ts           # ArcGIS OAuth authentication
-│   ├── layout.tsx                  # Main app layout
-│   ├── page.tsx                    # Main application page
-│   └── globals.css                 # Global styles
-├── components/
-│   ├── MapView.tsx                 # ArcGIS map component
-│   ├── SearchBar.tsx               # Search input interface
-│   └── SearchResults.tsx           # Results display component
-└── lib/
-    └── search.ts                   # Search logic and data types
-```
-
-### Configuration Files
-- `package.json`: Dependencies and build scripts
-- `tsconfig.json`: TypeScript configuration with path mapping
-- `next.config.js`: Next.js config with security headers
-- `tailwind.config.js`: Tailwind CSS configuration
-- `postcss.config.js`: PostCSS configuration
-- `.eslintrc.json`: ESLint configuration
-
-### Data & Python Files
-- `HIFLD_Open_Crosswalk_Geoplatform.csv`: Primary dataset (also in /public/)
-- `hifld_search_poc.py`: Interactive Python implementation
-- `simple_hifld_search.py`: Minimal Python implementation
-- `enhanced_search.py`: Advanced search widgets
-- `hifld_*.py`: Various specialized implementations
-
-## Data Schema
-
-The CSV contains these critical columns:
-- `Status`: Migration status (Active/Migrated)
-- `Layer Name`: Primary search field
-- `Agency`: Data provider organization
-- `Open REST Service`: Map service URL
-- `DUA Required`: Data Use Agreement flag (Yes/No)
-- `GII Access Required`: Restricted access flag (Yes/No)
-- `External Landing Page`: Reference URLs
-- `Old/New ID`: Tracking identifiers
-
-## Development Setup
-
-### Web Application Setup
+### Web Application
 ```bash
 # Install dependencies
 npm install
 
-# Environment variables (.env.local)
+# Development server (localhost:3000)
+npm run dev
+
+# Production build
+npm run build
+
+# Start production server
+npm start
+
+# Lint code
+npm run lint
+
+# Deploy to Vercel
+vercel
+```
+
+### Environment Setup
+Create `.env.local` with:
+```
 NEXT_PUBLIC_ARCGIS_API_KEY=your_api_key_here
 ARCGIS_CLIENT_ID=your_client_id_here
 ARCGIS_CLIENT_SECRET=your_client_secret_here
-
-# Development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Linting
-npm run lint
 ```
 
 ### Python Dependencies
@@ -101,131 +50,63 @@ pip install arcgis pandas numpy ipywidgets
 pip install fuzzywuzzy python-Levenshtein  # Optional for enhanced search
 ```
 
-## Build Scripts & Commands
+## Architecture Overview
 
-- `npm run dev`: Start development server (localhost:3000)
-- `npm run build`: Create production build
-- `npm start`: Run production server
-- `npm run lint`: Run ESLint checks
+### Web Application (Next.js 14 + TypeScript)
+The application uses a client-side architecture with React components for interactivity:
 
-## Core Functionality
+- **Data Flow**: CSV data is fetched from `/public/` directory and cached after first load
+- **Search**: Implemented in `src/lib/search.ts` with fuzzy matching on layer names
+- **Map Rendering**: Uses dynamic imports of ArcGIS JavaScript API to reduce initial bundle size
+- **State Management**: React hooks manage search results and selected layers
+- **Error Boundaries**: Wrap map components to handle ArcGIS service failures gracefully
 
-### Web Application Components
-
-#### Search Implementation (`src/lib/search.ts`)
-```typescript
-export interface Layer {
-  name: string
-  agency: string
-  serviceUrl: string | null
-  status: string
-  duaRequired: boolean
-  giiRequired: boolean
-}
-
-export async function searchLayers(query: string): Promise<Layer[]>
-```
-
-#### Map Component (`src/components/MapView.tsx`)
-- Uses ArcGIS JavaScript API with dynamic imports
-- Manages layer addition/removal
-- Centered on USA with configurable basemap
-- Error handling for invalid service URLs
-- Dynamically loads ArcGIS CSS to prevent blocking
-
-#### Search Interface (`src/components/SearchBar.tsx`)
-- Simple text input with search icon
-- Form submission handling
-- Responsive design
-
-### Python Implementation Pattern
-```python
-# Core search pattern
-def search_layers(search_term):
-    search_term = search_term.lower()
-    results = df[df['Layer Name'].str.lower().str.contains(search_term, na=False)]
-    return results
-
-# Map display
-gis = GIS()
-map_widget = gis.map()
-map_widget.add_layer({'url': layer_url})
-```
-
-## Architecture Considerations
-
-### Web Application Design
-1. **Client-Side Rendering**: Uses 'use client' for interactive components
-2. **Data Loading**: CSV loaded via fetch from /public/ directory
-3. **State Management**: React hooks for search, results, and selected layers
-4. **Error Handling**: Try-catch blocks with user feedback
-5. **Performance**: Data caching and lazy loading of ArcGIS modules
-
-### Security Features
-- Content Security headers in next.config.js
-- Environment variable protection (NEXT_PUBLIC_ prefix for client-side)
-- API key handling through environment variables
+Key architectural decisions:
+- All interactive components use 'use client' directive
+- ArcGIS CSS is loaded dynamically to prevent render blocking
 - OAuth 2.0 client credentials flow for ArcGIS authentication
+- Security headers configured in `next.config.js`
 
-### Python Implementation Features
-- Multiple variants for different use cases:
-  - `hifld_search_poc.py`: Full interactive widgets
-  - `simple_hifld_search.py`: Minimal implementation
-  - `enhanced_search.py`: Advanced UI with save functionality
-  - Terminal and standalone versions available
+### Python Implementations
+Multiple variants serve different use cases:
+- `hifld_search_poc.py`: Full interactive widgets for Jupyter
+- `simple_hifld_search.py`: Minimal implementation
+- `enhanced_search.py`: Advanced UI with save functionality
+- `hifld_terminal.py`: Command-line interface
+- `hifld_standalone.py`: Desktop application variant
 
-## Development Workflow
+## Data Schema
 
-### Adding New Features
-1. **Web App**: Add components to `src/components/`, update types in `src/lib/search.ts`
-2. **Python**: Maintain compatibility across multiple implementation files
-3. **Data**: CSV updates require both `/public/` and root directory updates
+Critical CSV columns:
+- `Layer Name`: Primary search field
+- `Open REST Service`: Map service URL (may be null)
+- `Status`: Active/Migrated
+- `DUA Required`: Yes/No - Data Use Agreement requirement
+- `GII Access Required`: Yes/No - Restricted access flag
+- `Agency`: Data provider organization
 
-### Testing Approaches
-```bash
-# Web application
-npm run build  # Ensures TypeScript compilation
-npm run lint   # Code quality checks
+## Common Development Tasks
 
-# Common search terms to test
-['fire', 'hospital', 'school', 'power', 'water', 'emergency']
-```
+### Adding a New Search Feature
+1. Update the `Layer` interface in `src/lib/search.ts`
+2. Modify the `searchLayers` function to include new logic
+3. Update `SearchResults.tsx` to display new information
+4. Maintain Python compatibility in relevant `.py` files
 
-### Deployment
-- **Vercel**: Configured with environment variables
-- **Environment Variables**: Set ARCGIS_* variables in deployment platform
-- **Static Assets**: CSV file served from /public/ directory
+### Troubleshooting Layer Loading
+1. Check if layer has valid `Open REST Service` URL
+2. Verify DUA/GII access requirements
+3. Look for CORS issues in browser console
+4. Some layers may require additional authentication
 
-## Common Issues & Solutions
-
-1. **ArcGIS Authentication**: Check API key configuration and service URLs
-2. **Layer Loading**: Some layers require GII access or DUA agreements
-3. **Performance**: Large datasets may need pagination or filtering
-4. **CORS Issues**: ArcGIS services may have domain restrictions
-5. **Infinite Loading**: Ensure ArcGIS CSS is loaded dynamically, not via @import
-
-## Code Standards
-
-### TypeScript/React
-- Strict TypeScript configuration
-- Functional components with hooks
-- Error boundaries for map components
-- Responsive design with Tailwind
-
-### Python
-- Pandas-based data processing
-- Error handling for missing service URLs
-- Widget-based interactive interfaces
-- Support for both Jupyter and standalone execution
+### Testing Search Functionality
+Common test queries: 'fire', 'hospital', 'school', 'power', 'water', 'emergency'
 
 ## Important Implementation Notes
 
-1. **Complete Code Replacements**: Always provide 100% complete code files, never partial edits
-2. **Dual Platform Support**: Maintain compatibility between web and Python versions  
-3. **Data Access**: Check DUA and GII requirements before displaying layers
-4. **Error Handling**: Gracefully handle missing service URLs and authentication failures
-5. **Environment Configuration**: Ensure proper API key and credential setup for both platforms
-6. **Performance**: CSV data is cached after first load to improve search performance
-7. **Map Initialization**: ArcGIS modules are dynamically imported to reduce initial bundle size
-
-When giving me code edits - NEVER give me partial to edit into the code - Always give me 100% for complete delete and paste new
+1. **Complete Code Replacements**: Always provide 100% complete code files, never partial edits (per user instructions)
+2. **Environment Variables**: Client-side variables must use `NEXT_PUBLIC_` prefix
+3. **CSV Location**: Primary data file exists in both root and `/public/` directories
+4. **Error Handling**: All ArcGIS operations should be wrapped in try-catch blocks
+5. **Performance**: CSV data is cached after first load to improve search performance
+6. **Deployment**: Vercel deployment requires setting environment variables in project settings

@@ -1,17 +1,20 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 import { Layer } from '@/lib/search'
 
 interface MapViewProps {
   layers: Layer[]
 }
 
-export default function MapView({ layers }: MapViewProps) {
+const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<any>(null)
   const layerRefsRef = useRef<Map<string, any>>(new Map())
   const [widgetsLoaded, setWidgetsLoaded] = useState(false)
+
+  // Expose the view reference to parent components
+  useImperativeHandle(ref, () => viewRef.current)
 
   useEffect(() => {
     // Dynamically load ArcGIS CSS
@@ -346,4 +349,8 @@ export default function MapView({ layers }: MapViewProps) {
       )}
     </div>
   )
-}
+})
+
+MapView.displayName = 'MapView'
+
+export default MapView
