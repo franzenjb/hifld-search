@@ -10,6 +10,7 @@ interface MapViewProps {
 export default function MapView({ layers }: MapViewProps) {
   const mapDiv = useRef<HTMLDivElement>(null)
   const mapView = useRef<any>(null)
+  const layerRefs = useRef<Map<string, any>>(new Map())
 
   useEffect(() => {
     let view: any = null
@@ -63,6 +64,37 @@ export default function MapView({ layers }: MapViewProps) {
         await view.when()
         console.log('7. Map ready!')
 
+        // Add widgets
+        try {
+          const [Home, Search, Legend, Expand] = await Promise.all([
+            import('@arcgis/core/widgets/Home'),
+            import('@arcgis/core/widgets/Search'),
+            import('@arcgis/core/widgets/Legend'),
+            import('@arcgis/core/widgets/Expand')
+          ])
+
+          // Home button
+          const homeWidget = new Home.default({ view })
+          view.ui.add(homeWidget, 'top-left')
+
+          // Search widget
+          const searchWidget = new Search.default({ view })
+          view.ui.add(searchWidget, 'top-right')
+
+          // Legend
+          const legend = new Legend.default({ view })
+          const legendExpand = new Expand.default({
+            view: view,
+            content: legend,
+            expandIcon: 'legend'
+          })
+          view.ui.add(legendExpand, 'bottom-left')
+
+          console.log('8. Widgets added')
+        } catch (error) {
+          console.error('Widget error:', error)
+        }
+
       } catch (error) {
         console.error('CRITICAL MAP ERROR:', error)
       }
@@ -76,6 +108,51 @@ export default function MapView({ layers }: MapViewProps) {
       }
     }
   }, [])
+
+  // Handle layers
+  useEffect(() => {
+    if (!mapView.current) return
+
+    async function updateLayers() {
+      try {
+        const [FeatureLayer] = await Promise.all([
+          import('@arcgis/core/layers/FeatureLayer')
+        ])
+
+        // Remove old layers
+        const currentNames = new Set(layers.map(l => l.name))
+        layerRefs.current.forEach((layer, name) => {
+          if (!currentNames.has(name)) {
+            mapView.current.map.remove(layer)
+            layerRefs.current.delete(name)
+          }
+        })
+
+        // Add new layers
+        for (const layer of layers) {
+          if (!layer.serviceUrl || layerRefs.current.has(layer.name)) continue
+
+          try {
+            const featureLayer = new FeatureLayer.default({
+              url: layer.serviceUrl,
+              title: layer.name,
+              outFields: ['*']
+            })
+
+            mapView.current.map.add(featureLayer)
+            layerRefs.current.set(layer.name, featureLayer)
+            console.log(`Added layer: ${layer.name}`)
+          } catch (err) {
+            console.error(`Failed to add layer ${layer.name}:`, err)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to update layers:', error)
+      }
+    }
+
+    updateLayers()
+  }, [layers])
 
   return (
     <div className="h-full w-full bg-gray-100">
