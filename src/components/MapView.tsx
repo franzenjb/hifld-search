@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Layer } from '@/lib/search'
 
 interface MapViewProps {
@@ -11,6 +11,7 @@ export default function MapView({ layers }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<any>(null)
   const layerRefsRef = useRef<Map<string, any>>(new Map())
+  const [widgetsLoaded, setWidgetsLoaded] = useState(false)
 
   useEffect(() => {
     // Dynamically load ArcGIS CSS
@@ -31,16 +32,11 @@ export default function MapView({ layers }: MapViewProps) {
 
     const initializeMap = async () => {
       try {
-        const [Map, MapView, FeatureLayer, Basemap, esriConfig, Home, Legend, Search, Expand] = await Promise.all([
+        // Load core modules first
+        const [Map, MapView, esriConfig] = await Promise.all([
           import('@arcgis/core/Map'),
           import('@arcgis/core/views/MapView'),
-          import('@arcgis/core/layers/FeatureLayer'),
-          import('@arcgis/core/Basemap'),
           import('@arcgis/core/config'),
-          import('@arcgis/core/widgets/Home'),
-          import('@arcgis/core/widgets/Legend'),
-          import('@arcgis/core/widgets/Search'),
-          import('@arcgis/core/widgets/Expand'),
         ])
 
         if (!isMounted) return
@@ -70,45 +66,61 @@ export default function MapView({ layers }: MapViewProps) {
           }
         })
 
+        viewRef.current = view
+
         // Wait for view to be ready
         await view.when()
-        console.log('View ready, adding widgets...')
+        console.log('View ready')
 
-        // Add Home widget
-        const homeWidget = new Home.default({
-          view: view
-        })
-        view.ui.add(homeWidget, 'top-left')
-        console.log('Home widget added')
+        // Load and add widgets after view is ready
+        setTimeout(async () => {
+          try {
+            const [Home, Legend, Search, Expand] = await Promise.all([
+              import('@arcgis/core/widgets/Home'),
+              import('@arcgis/core/widgets/Legend'),
+              import('@arcgis/core/widgets/Search'),
+              import('@arcgis/core/widgets/Expand'),
+            ])
 
-        // Add Search widget
-        const searchWidget = new Search.default({
-          view: view,
-          includeDefaultSources: true,
-          locationEnabled: false,
-          popupEnabled: false
-        })
-        view.ui.add(searchWidget, {
-          position: 'top-right',
-          index: 0
-        })
-        console.log('Search widget added')
+            // Add Home widget
+            const homeWidget = new Home.default({
+              view: view
+            })
+            view.ui.add(homeWidget, 'top-left')
+            console.log('Home widget added')
 
-        // Add Legend widget inside an Expand widget
-        const legend = new Legend.default({
-          view: view
-        })
-        const legendExpand = new Expand.default({
-          expandIconClass: "esri-icon-layer-list",
-          expandTooltip: "Legend",
-          view: view,
-          content: legend,
-          expanded: false
-        })
-        view.ui.add(legendExpand, 'bottom-left')
-        console.log('Legend widget added')
+            // Add Search widget
+            const searchWidget = new Search.default({
+              view: view,
+              includeDefaultSources: true,
+              locationEnabled: false,
+              popupEnabled: false
+            })
+            view.ui.add(searchWidget, {
+              position: 'top-right',
+              index: 0
+            })
+            console.log('Search widget added')
 
-        viewRef.current = view
+            // Add Legend widget inside an Expand widget
+            const legend = new Legend.default({
+              view: view
+            })
+            const legendExpand = new Expand.default({
+              expandIcon: "layer-list",
+              expandTooltip: "Legend",
+              view: view,
+              content: legend,
+              expanded: false
+            })
+            view.ui.add(legendExpand, 'bottom-left')
+            console.log('Legend widget added')
+
+            setWidgetsLoaded(true)
+          } catch (error) {
+            console.error('Failed to load widgets:', error)
+          }
+        }, 1000) // Delay widget loading
 
         // Add click event to show coordinates if no features found
         view.on('click', (event: any) => {
@@ -159,91 +171,15 @@ export default function MapView({ layers }: MapViewProps) {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
           try {
-            // Create custom popup template with simple content
+            // Create simple popup template
             const popupTemplate = new PopupTemplate.default({
-              title: layer.name,
-              content: (feature: any) => {
-                const attributes = feature.graphic.attributes
-                console.log('Popup triggered for attributes:', attributes)
-                
-                // Get the best available title
-                const possibleTitleFields = ['NAME', 'name', 'FACILITY_NAME', 'facility_name', 
-                                           'SITE_NAME', 'site_name', 'FACNAME', 'facname',
-                                           'FIRE_NAME', 'fire_name', 'INCIDENT_NAME', 'incident_name']
-                
-                let title = layer.name
-                for (const field of possibleTitleFields) {
-                  if (attributes[field]) {
-                    title = attributes[field]
-                    break
-                  }
-                }
-                
-                // Create simple table for attributes
-                let content = `<div style="padding: 10px;">
-                  <h3 style="margin: 0 0 10px 0;">${title}</h3>
-                  <p><strong>Layer:</strong> ${layer.name}</p>
-                  <p><strong>Agency:</strong> ${layer.agency}</p>
-                  <hr style="margin: 10px 0;">
-                  <table style="width: 100%;">
-                `
-                
-                // Add key attributes
-                const importantFields = ['ADDRESS', 'CITY', 'STATE', 'ZIP', 'PHONE', 'WEBSITE', 
-                                       'STATUS', 'TYPE', 'CATEGORY', 'OWNER', 'OPERATOR', 'COUNTY',
-                                       'ACRES', 'AREA', 'PERIMETER', 'DATE', 'START_DATE', 'END_DATE']
-                
-                let displayedCount = 0
-                const displayedFields = new Set<string>()
-                
-                // Show important fields first
-                for (const field of importantFields) {
-                  const variations = [field, field.toLowerCase(), field.replace(/_/g, '')]
-                  for (const variant of variations) {
-                    if (attributes[variant] && !displayedFields.has(variant)) {
-                      const value = attributes[variant]
-                      if (value && value !== 'null' && value !== 'NULL' && value !== 'Null') {
-                        displayedFields.add(variant)
-                        content += `
-                          <tr>
-                            <td style="padding: 4px; font-weight: bold;">${field.replace(/_/g, ' ')}:</td>
-                            <td style="padding: 4px;">${value}</td>
-                          </tr>
-                        `
-                        displayedCount++
-                        break
-                      }
-                    }
-                  }
-                }
-                
-                // If we haven't shown enough fields, add some more
-                if (displayedCount < 5) {
-                  for (const [key, value] of Object.entries(attributes)) {
-                    if (displayedCount >= 8) break
-                    if (value && value !== 'null' && value !== 'NULL' && 
-                        !key.startsWith('OBJECTID') && !key.startsWith('Shape') &&
-                        !key.startsWith('FID') && !displayedFields.has(key)) {
-                      content += `
-                        <tr>
-                          <td style="padding: 4px; font-weight: bold;">${key.replace(/_/g, ' ')}:</td>
-                          <td style="padding: 4px;">${value}</td>
-                        </tr>
-                      `
-                      displayedCount++
-                    }
-                  }
-                }
-                
-                content += `
-                  </table>
-                  <p style="margin-top: 10px; font-size: 12px; color: #666;">
-                    Total attributes: ${Object.keys(attributes).length}
-                  </p>
-                </div>`
-                
-                return content
-              },
+              title: "{NAME} {name} {FACILITY_NAME} {facility_name} {SITE_NAME} {site_name}",
+              content: [{
+                type: "fields",
+                fieldInfos: [
+                  { fieldName: "*", label: "*" }
+                ]
+              }],
               outFields: ["*"]
             })
 
@@ -264,10 +200,10 @@ export default function MapView({ layers }: MapViewProps) {
               renderer = new SimpleRenderer.default({
                 symbol: new SimpleMarkerSymbol.default({
                   size: 10,
-                  color: [51, 122, 183, 0.8],
+                  color: [220, 38, 38, 0.8], // Red color to match your EMS points
                   outline: {
                     color: [255, 255, 255, 1],
-                    width: 2
+                    width: 1.5
                   }
                 })
               })
@@ -317,6 +253,12 @@ export default function MapView({ layers }: MapViewProps) {
             <h3 className="text-xl font-semibold mb-2">No layers selected</h3>
             <p className="text-gray-600">Search for infrastructure and add layers to the map</p>
           </div>
+        </div>
+      )}
+      
+      {!widgetsLoaded && layers.length > 0 && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-white bg-opacity-90 px-4 py-2 rounded shadow">
+          <p className="text-sm text-gray-600">Loading map controls...</p>
         </div>
       )}
     </div>
