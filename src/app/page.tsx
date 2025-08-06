@@ -4,8 +4,6 @@ import { useState } from 'react'
 import SearchBar from '@/components/SearchBar'
 import SearchResults from '@/components/SearchResults'
 import MapView from '@/components/MapView'
-import SaveMapButton from '@/components/SaveMapButton'
-import ExportMapButton from '@/components/ExportMapButton'
 import { searchLayers, type Layer } from '@/lib/search'
 
 export default function Home() {
@@ -85,16 +83,6 @@ export default function Home() {
                 </button>
               </div>
               
-              <div className="flex gap-2 mb-3">
-                {/* <ExportMapButton 
-                  layers={selectedLayers} 
-                  viewRef={mapViewRef.current}
-                /> */}
-                {/* <SaveMapButton 
-                  layers={selectedLayers} 
-                  viewRef={mapViewRef.current}
-                /> */}
-              </div>
               
               <div className="space-y-1 max-h-32 overflow-y-auto">
                 {selectedLayers.map((layer) => (
