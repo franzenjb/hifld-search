@@ -198,62 +198,91 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
           try {
-            // Create feature layer WITHOUT pre-loading but WITH proper rendering
+            // Try to guess geometry type from layer name
+            let renderer
+            const lowerName = layer.name.toLowerCase()
+            
+            if (lowerName.includes('boundary') || lowerName.includes('area') || 
+                lowerName.includes('zone') || lowerName.includes('perimeter') ||
+                lowerName.includes('polygon') || lowerName.includes('district')) {
+              // Likely a polygon layer
+              renderer = new SimpleRenderer.default({
+                symbol: new SimpleFillSymbol.default({
+                  color: [220, 38, 38, 0.3],
+                  outline: {
+                    color: [220, 38, 38, 1],
+                    width: 2
+                  }
+                })
+              })
+            } else if (lowerName.includes('road') || lowerName.includes('route') || 
+                       lowerName.includes('rail') || lowerName.includes('line') ||
+                       lowerName.includes('pipeline') || lowerName.includes('transmission')) {
+              // Likely a line layer
+              renderer = new SimpleRenderer.default({
+                symbol: new SimpleLineSymbol.default({
+                  color: [220, 38, 38, 1],
+                  width: 3
+                })
+              })
+            } else {
+              // Default to points
+              renderer = new SimpleRenderer.default({
+                symbol: new SimpleMarkerSymbol.default({
+                  size: 10,
+                  color: [220, 38, 38, 0.8],
+                  outline: {
+                    color: [255, 255, 255, 1],
+                    width: 1.5
+                  }
+                })
+              })
+            }
+
+            // Create feature layer with guessed renderer
             const featureLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
               title: layer.name,
               popupEnabled: true,
               outFields: ["*"],
-              // Simple popup template
               popupTemplate: {
                 title: layer.name,
                 content: `<p>Layer: ${layer.name}</p><p>Agency: ${layer.agency}</p><p>{*}</p>`
-              }
-              // Do NOT set renderer here - let ArcGIS detect geometry type
+              },
+              renderer: renderer
             })
 
-            // Set up renderer AFTER layer is added to map
-            featureLayer.when(() => {
-              // Now we can safely check geometry type
-              const geometryType = featureLayer.geometryType
-              console.log(`Layer ${layer.name} geometry type: ${geometryType}`)
+            // After layer loads, update renderer if our guess was wrong
+            featureLayer.on("layerview-create", (event) => {
+              const layerView = event.layerView
+              const actualGeometryType = featureLayer.geometryType
               
-              // Set appropriate renderer based on geometry
-              if (geometryType === 'polygon') {
-                featureLayer.renderer = new SimpleRenderer.default({
-                  symbol: new SimpleFillSymbol.default({
-                    color: [220, 38, 38, 0.3],
-                    outline: {
+              if (actualGeometryType) {
+                console.log(`Layer ${layer.name} actual geometry: ${actualGeometryType}`)
+                
+                // Update renderer if needed
+                if (actualGeometryType === 'polygon' && !lowerName.includes('boundary')) {
+                  featureLayer.renderer = new SimpleRenderer.default({
+                    symbol: new SimpleFillSymbol.default({
+                      color: [220, 38, 38, 0.3],
+                      outline: {
+                        color: [220, 38, 38, 1],
+                        width: 2
+                      }
+                    })
+                  })
+                } else if (actualGeometryType === 'polyline' && !lowerName.includes('road')) {
+                  featureLayer.renderer = new SimpleRenderer.default({
+                    symbol: new SimpleLineSymbol.default({
                       color: [220, 38, 38, 1],
-                      width: 2
-                    }
+                      width: 3
+                    })
                   })
-                })
-              } else if (geometryType === 'polyline') {
-                featureLayer.renderer = new SimpleRenderer.default({
-                  symbol: new SimpleLineSymbol.default({
-                    color: [220, 38, 38, 1],
-                    width: 3
-                  })
-                })
-              } else {
-                // Point or multipoint
-                featureLayer.renderer = new SimpleRenderer.default({
-                  symbol: new SimpleMarkerSymbol.default({
-                    size: 10,
-                    color: [220, 38, 38, 0.8],
-                    outline: {
-                      color: [255, 255, 255, 1],
-                      width: 1.5
-                    }
-                  })
-                })
+                }
               }
-            }).catch((error) => {
-              console.error(`Failed to set renderer for ${layer.name}:`, error)
             })
 
-            // Add error handling for layer
+            // Add error handling
             featureLayer.on("layerview-create-error", (event) => {
               console.error(`Layer failed to create view: ${layer.name}`, event.error)
             })
@@ -262,6 +291,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
             viewRef.current.map.add(featureLayer)
             layerRefsRef.current.set(layer.name, featureLayer)
             console.log(`Layer ${layer.name} added to map`)
+
 
           } catch (error) {
             console.error(`Failed to add layer ${layer.name}:`, error)
