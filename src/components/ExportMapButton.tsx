@@ -229,8 +229,8 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
               <ol className="list-decimal list-inside text-sm text-blue-700 space-y-1">
                 <li>Download the JSON file</li>
                 <li>Go to <span className="font-mono">ago-assistant.esri.com</span></li>
-                <li>Sign in and click "Add Item"</li>
-                <li>Paste the JSON and select Type: "Web Map"</li>
+                <li>Sign in and click &quot;Add Item&quot;</li>
+                <li>Paste the JSON and select Type: &quot;Web Map&quot;</li>
               </ol>
             </div>
 

@@ -174,11 +174,12 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
 
     const updateLayers = async () => {
       try {
-        const [FeatureLayer, SimpleRenderer, SimpleMarkerSymbol, SimpleFillSymbol] = await Promise.all([
+        const [FeatureLayer, SimpleRenderer, SimpleMarkerSymbol, SimpleFillSymbol, SimpleLineSymbol] = await Promise.all([
           import('@arcgis/core/layers/FeatureLayer'),
           import('@arcgis/core/renderers/SimpleRenderer'),
           import('@arcgis/core/symbols/SimpleMarkerSymbol'),
-          import('@arcgis/core/symbols/SimpleFillSymbol')
+          import('@arcgis/core/symbols/SimpleFillSymbol'),
+          import('@arcgis/core/symbols/SimpleLineSymbol')
         ])
         
         // Get current layer names
@@ -197,7 +198,7 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
           if (!layer.serviceUrl || layerRefsRef.current.has(layer.name)) continue
 
           try {
-            // Create feature layer with simple defaults - NO pre-loading
+            // Create feature layer WITHOUT pre-loading but WITH proper rendering
             const featureLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
               title: layer.name,
@@ -207,18 +208,49 @@ const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
               popupTemplate: {
                 title: layer.name,
                 content: `<p>Layer: ${layer.name}</p><p>Agency: ${layer.agency}</p><p>{*}</p>`
-              },
-              // Default renderer for all types
-              renderer: new SimpleRenderer.default({
-                symbol: new SimpleMarkerSymbol.default({
-                  size: 10,
-                  color: [220, 38, 38, 0.8],
-                  outline: {
-                    color: [255, 255, 255, 1],
-                    width: 1.5
-                  }
+              }
+              // Do NOT set renderer here - let ArcGIS detect geometry type
+            })
+
+            // Set up renderer AFTER layer is added to map
+            featureLayer.when(() => {
+              // Now we can safely check geometry type
+              const geometryType = featureLayer.geometryType
+              console.log(`Layer ${layer.name} geometry type: ${geometryType}`)
+              
+              // Set appropriate renderer based on geometry
+              if (geometryType === 'polygon') {
+                featureLayer.renderer = new SimpleRenderer.default({
+                  symbol: new SimpleFillSymbol.default({
+                    color: [220, 38, 38, 0.3],
+                    outline: {
+                      color: [220, 38, 38, 1],
+                      width: 2
+                    }
+                  })
                 })
-              })
+              } else if (geometryType === 'polyline') {
+                featureLayer.renderer = new SimpleRenderer.default({
+                  symbol: new SimpleLineSymbol.default({
+                    color: [220, 38, 38, 1],
+                    width: 3
+                  })
+                })
+              } else {
+                // Point or multipoint
+                featureLayer.renderer = new SimpleRenderer.default({
+                  symbol: new SimpleMarkerSymbol.default({
+                    size: 10,
+                    color: [220, 38, 38, 0.8],
+                    outline: {
+                      color: [255, 255, 255, 1],
+                      width: 1.5
+                    }
+                  })
+                })
+              }
+            }).catch((error) => {
+              console.error(`Failed to set renderer for ${layer.name}:`, error)
             })
 
             // Add error handling for layer
