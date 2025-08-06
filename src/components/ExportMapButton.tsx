@@ -85,58 +85,112 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
     }
 
     try {
-      // Get current map extent
+      // Get current map extent and spatial reference
       const extent = viewRef.extent ? {
         xmin: viewRef.extent.xmin,
         ymin: viewRef.extent.ymin,
         xmax: viewRef.extent.xmax,
         ymax: viewRef.extent.ymax,
-        spatialReference: viewRef.extent.spatialReference?.wkid || 4326
+        spatialReference: {
+          wkid: viewRef.extent.spatialReference?.wkid || 102100 // Web Mercator by default
+        }
       } : null
 
       // Get current basemap
-      const basemap = viewRef.map?.basemap?.id || viewRef.map?.basemap?.title || 'streets-navigation-vector'
+      const basemapId = viewRef.map?.basemap?.id || 'streets-navigation-vector'
+      
+      // Map our basemap IDs to ArcGIS basemap names
+      const basemapMapping: Record<string, string> = {
+        'streets-navigation-vector': 'streets-navigation-vector',
+        'topo-vector': 'topo-vector',
+        'satellite': 'satellite',
+        'hybrid': 'hybrid',
+        'gray-vector': 'gray-vector',
+        'dark-gray-vector': 'dark-gray-vector',
+        'oceans': 'oceans',
+        'osm': 'osm'
+      }
 
-      // Create configuration object
-      const mapConfig = {
-        title: mapTitle,
-        description: mapDescription,
-        tags: mapTags,
-        layers: layers.map(layer => ({
-          name: layer.name,
-          agency: layer.agency,
-          serviceUrl: layer.serviceUrl,
-          status: layer.status,
-          duaRequired: layer.duaRequired,
-          giiRequired: layer.giiRequired
+      // Create ArcGIS Web Map JSON format
+      const webMapJson = {
+        operationalLayers: layers.map((layer, index) => ({
+          id: `layer_${index}`,
+          title: layer.name,
+          url: layer.serviceUrl,
+          layerType: "ArcGISFeatureLayer",
+          visibility: true,
+          opacity: 1,
+          // Add popup info if available
+          popupInfo: {
+            title: layer.name,
+            description: `Source: ${layer.agency}`
+          }
         })),
-        extent: extent,
-        center: viewRef.center ? {
-          longitude: viewRef.center.longitude,
-          latitude: viewRef.center.latitude
-        } : null,
-        zoom: viewRef.zoom || 4,
-        basemap: basemap,
-        exportDate: new Date().toISOString(),
-        version: '1.0'
+        baseMap: {
+          baseMapLayers: [{
+            id: "defaultBasemap",
+            layerType: "ArcGISBasemapLayer",
+            url: `https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer`,
+            visibility: true,
+            opacity: 1,
+            title: "Basemap"
+          }],
+          title: basemapMapping[basemapId] || "Basemap"
+        },
+        spatialReference: extent?.spatialReference || { wkid: 102100 },
+        initialState: {
+          viewpoint: {
+            targetGeometry: extent || {
+              xmin: -14478840,
+              ymin: 2761109,
+              xmax: -7246958,
+              ymax: 6525624,
+              spatialReference: { wkid: 102100 }
+            }
+          }
+        },
+        authoringApp: "HIFLD Search Application",
+        authoringAppVersion: "1.0",
+        version: "2.26"
+      }
+
+      // Create the full item JSON that ArcGIS Online expects
+      const itemJson = {
+        title: mapTitle,
+        snippet: mapDescription.substring(0, 250), // ArcGIS limits snippet to 250 chars
+        description: mapDescription,
+        tags: mapTags.join(','),
+        type: "Web Map",
+        typeKeywords: [
+          "ArcGIS Online",
+          "Explorer Web Map",
+          "Map",
+          "Online Map",
+          "Web Map",
+          "HIFLD"
+        ],
+        extent: extent ? [
+          [extent.xmin, extent.ymin],
+          [extent.xmax, extent.ymax]
+        ] : [[-130, 24], [-65, 50]], // Continental US as fallback
+        text: JSON.stringify(webMapJson)
       }
 
       // Create blob and download
-      const blob = new Blob([JSON.stringify(mapConfig, null, 2)], { type: 'application/json' })
+      const blob = new Blob([JSON.stringify(itemJson, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       
-      // Generate filename with date and primary layer
+      // Generate filename with date
       const date = new Date().toISOString().split('T')[0]
-      const primaryLayer = layers[0].name.replace(/[^a-z0-9]/gi, '_').substring(0, 30)
-      a.download = `HIFLD_Map_${primaryLayer}_${date}.json`
+      a.download = `HIFLD_WebMap_${date}.json`
       
       a.href = url
       a.click()
       URL.revokeObjectURL(url)
 
-      // Show success message
-      alert(`Map configuration exported successfully!\n\nFile saved as: ${a.download}\n\nYou can later upload this to ArcGIS Online or share with colleagues.`)
+      // Show success message with instructions
+      alert(`Web Map exported successfully!\n\nTo import to ArcGIS Online:\n1. Go to https://ago-assistant.esri.com/\n2. Sign in with your ArcGIS account\n3. Click "I want to..." → "Add Item"\n4. Paste the contents of ${a.download}\n5. Select Type: "Web Map"\n6. Click "Add Item"`)
       
       // Close dialog
       setShowDialog(false)
@@ -155,29 +209,29 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
       <button
         onClick={() => setShowDialog(true)}
         className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-        title="Export map configuration to file"
+        title="Export map for ArcGIS Online"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        Export Config
+        Export to ArcGIS
       </button>
 
       {showDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-semibold mb-4">Export Map Configuration</h3>
+            <h3 className="text-xl font-semibold mb-4">Export Web Map for ArcGIS Online</h3>
             
             <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-800">
-                This will download a JSON file with your map configuration that you can:
+              <p className="text-sm text-blue-800 font-medium mb-2">
+                This will create a Web Map JSON file that you can import directly into ArcGIS Online
               </p>
-              <ul className="list-disc list-inside text-sm text-blue-700 mt-2">
-                <li>Upload to ArcGIS Online later</li>
-                <li>Share with colleagues</li>
-                <li>Use as a backup</li>
-                <li>Import back into this app (future feature)</li>
-              </ul>
+              <ol className="list-decimal list-inside text-sm text-blue-700 space-y-1">
+                <li>Download the JSON file</li>
+                <li>Go to <span className="font-mono">ago-assistant.esri.com</span></li>
+                <li>Sign in and click "Add Item"</li>
+                <li>Paste the JSON and select Type: "Web Map"</li>
+              </ol>
             </div>
 
             <div className="space-y-4">
@@ -248,13 +302,12 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
               </div>
 
               <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-sm font-medium text-gray-700 mb-2">Configuration will include:</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Web Map will include:</p>
                 <ul className="space-y-1 text-sm text-gray-600">
-                  <li>✓ All {layers.length} selected layers with service URLs</li>
-                  <li>✓ Current map view extent and zoom level</li>
-                  <li>✓ Basemap selection</li>
-                  <li>✓ Title, description, and tags for ArcGIS</li>
-                  <li>✓ Export date and version</li>
+                  <li>✓ All {layers.length} selected layers as operational layers</li>
+                  <li>✓ Current map extent and spatial reference</li>
+                  <li>✓ Layer visibility and popup configuration</li>
+                  <li>✓ Metadata for ArcGIS Online item</li>
                 </ul>
               </div>
             </div>
@@ -269,7 +322,7 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
                     : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }`}
               >
-                Download Configuration
+                Download Web Map JSON
               </button>
               <button
                 onClick={() => {
