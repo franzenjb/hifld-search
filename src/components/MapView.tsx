@@ -107,11 +107,12 @@ export default function MapView({ layers }: MapViewProps) {
               view: view
             })
             const legendExpand = new Expand.default({
-              expandIcon: "layer-list",
-              expandTooltip: "Legend",
+              expandIcon: "legend",
+              expandTooltip: "Show Map Legend",
               view: view,
               content: legend,
-              expanded: false
+              expanded: false,
+              group: "bottom-left"
             })
             view.ui.add(legendExpand, 'bottom-left')
             console.log('Legend widget added')
@@ -182,15 +183,92 @@ export default function MapView({ layers }: MapViewProps) {
             const geometryType = tempLayer.geometryType
             console.log(`Layer ${layer.name} loaded, geometry type:`, geometryType)
 
-            // Create simple popup template that works for all geometries
+            // Create popup template with dynamic content
             const popupTemplate = new PopupTemplate.default({
-              title: layer.name,
-              content: `
-                <b>Layer:</b> ${layer.name}<br>
-                <b>Agency:</b> ${layer.agency}<br>
-                <hr>
-                {*}
-              `,
+              title: "{poly_IncidentName} {NAME} {name} {FIRE_NAME}",
+              content: (feature: any) => {
+                const attrs = feature.graphic.attributes
+                console.log('Feature attributes:', attrs)
+                
+                // Build dynamic content based on actual attributes
+                let content = '<div style="font-family: sans-serif; padding: 10px;">'
+                
+                // Helper function to format dates
+                const formatDate = (value: any) => {
+                  if (!value || value === 'null') return 'Not available'
+                  // Handle Unix timestamp (milliseconds)
+                  if (typeof value === 'number' && value > 1000000000000) {
+                    return new Date(value).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })
+                  }
+                  // Handle date strings
+                  if (typeof value === 'string') {
+                    const date = new Date(value)
+                    if (!isNaN(date.getTime())) {
+                      return date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })
+                    }
+                  }
+                  return value
+                }
+                
+                // Priority fields for fire data
+                const fireFields = [
+                  { field: 'poly_IncidentName', label: 'Incident Name' },
+                  { field: 'poly_Acres', label: 'Acres', format: (v: any) => v ? Number(v).toLocaleString() : 'N/A' },
+                  { field: 'poly_GISAcres', label: 'GIS Acres', format: (v: any) => v ? Number(v).toLocaleString() : 'N/A' },
+                  { field: 'attr_ContainmentDateTime', label: 'Containment Date', format: formatDate },
+                  { field: 'attr_PercentContained', label: 'Percent Contained', format: (v: any) => v ? `${v}%` : 'N/A' },
+                  { field: 'attr_FireDiscoveryDateTime', label: 'Discovery Date', format: formatDate },
+                  { field: 'County', label: 'County' },
+                  { field: 'State', label: 'State' }
+                ]
+                
+                // Check for fire-specific fields first
+                let hasFireData = false
+                fireFields.forEach(({field, label, format}) => {
+                  if (attrs[field] !== undefined && attrs[field] !== null) {
+                    const value = format ? format(attrs[field]) : attrs[field]
+                    content += `<p><strong>${label}:</strong> ${value}</p>`
+                    hasFireData = true
+                  }
+                })
+                
+                // If no fire fields found, show all non-null attributes
+                if (!hasFireData) {
+                  content += '<table style="width: 100%; border-collapse: collapse;">'
+                  for (const [key, value] of Object.entries(attrs)) {
+                    if (value && value !== 'null' && 
+                        !key.startsWith('OBJECTID') && 
+                        !key.startsWith('Shape') &&
+                        !key.startsWith('FID')) {
+                      content += `
+                        <tr>
+                          <td style="padding: 4px; font-weight: bold; vertical-align: top;">${key}:</td>
+                          <td style="padding: 4px;">${value}</td>
+                        </tr>
+                      `
+                    }
+                  }
+                  content += '</table>'
+                }
+                
+                content += `
+                  <hr style="margin: 10px 0;">
+                  <p style="font-size: 12px; color: #666;">
+                    <strong>Layer:</strong> ${layer.name}<br>
+                    <strong>Agency:</strong> ${layer.agency}
+                  </p>
+                </div>`
+                
+                return content
+              },
               outFields: ["*"]
             })
 

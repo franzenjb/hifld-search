@@ -43,9 +43,14 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col">
       <header className="bg-blue-600 text-white p-4 shadow-lg">
-        <div className="container mx-auto">
-          <h1 className="text-2xl font-bold mb-2">HIFLD Infrastructure Search</h1>
-          <p className="text-blue-100">Search and visualize critical infrastructure data</p>
+        <div className="container mx-auto flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">HIFLD Infrastructure Search</h1>
+            <p className="text-blue-100">Search and visualize critical infrastructure data</p>
+          </div>
+          <span className="text-xs text-blue-200 mt-1">
+            Questions or Comments jeff.franzen2@redcross.org
+          </span>
         </div>
       </header>
 
