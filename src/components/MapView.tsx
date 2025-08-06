@@ -31,13 +31,12 @@ export default function MapView({ layers }: MapViewProps) {
 
     const initializeMap = async () => {
       try {
-        const [Map, MapView, FeatureLayer, Basemap, esriConfig, PopupTemplate] = await Promise.all([
+        const [Map, MapView, FeatureLayer, Basemap, esriConfig] = await Promise.all([
           import('@arcgis/core/Map'),
           import('@arcgis/core/views/MapView'),
           import('@arcgis/core/layers/FeatureLayer'),
           import('@arcgis/core/Basemap'),
           import('@arcgis/core/config'),
-          import('@arcgis/core/PopupTemplate'),
         ])
 
         if (!isMounted) return
@@ -60,6 +59,7 @@ export default function MapView({ layers }: MapViewProps) {
           popup: {
             dockEnabled: true,
             dockOptions: {
+              buttonEnabled: false,
               position: 'bottom-right',
               breakpoint: false
             }
@@ -70,6 +70,11 @@ export default function MapView({ layers }: MapViewProps) {
 
         // Wait for view to be ready
         await view.when()
+
+        // Add click event to show coordinates if no features found
+        view.on('click', (event: any) => {
+          console.log('Map clicked at:', event.mapPoint.longitude, event.mapPoint.latitude)
+        })
       } catch (error) {
         console.error('Failed to initialize map:', error)
       }
@@ -91,9 +96,11 @@ export default function MapView({ layers }: MapViewProps) {
 
     const updateLayers = async () => {
       try {
-        const [FeatureLayer, PopupTemplate] = await Promise.all([
+        const [FeatureLayer, PopupTemplate, SimpleRenderer, SimpleMarkerSymbol] = await Promise.all([
           import('@arcgis/core/layers/FeatureLayer'),
-          import('@arcgis/core/PopupTemplate')
+          import('@arcgis/core/PopupTemplate'),
+          import('@arcgis/core/renderers/SimpleRenderer'),
+          import('@arcgis/core/symbols/SimpleMarkerSymbol')
         ])
         
         // Get current layer names
@@ -114,20 +121,21 @@ export default function MapView({ layers }: MapViewProps) {
           try {
             // Create custom popup template
             const popupTemplate = new PopupTemplate.default({
-              title: (feature: any) => {
-                // Try to find a suitable title field
+              title: "{NAME} {name} {FACILITY_NAME} {facility_name} {SITE_NAME} {site_name}",
+              content: async (feature: any) => {
                 const attributes = feature.graphic.attributes
-                return attributes.NAME || attributes.name || attributes.FACILITY_NAME || 
-                       attributes.facility_name || attributes.SITE_NAME || attributes.site_name ||
-                       layer.name
-              },
-              content: (feature: any) => {
-                const attributes = feature.graphic.attributes
+                console.log('Popup triggered for attributes:', attributes)
+                
+                // Get the actual title
+                const title = attributes.NAME || attributes.name || attributes.FACILITY_NAME || 
+                             attributes.facility_name || attributes.SITE_NAME || attributes.site_name ||
+                             attributes.FACNAME || attributes.facname || layer.name
                 
                 // Create a nicely formatted HTML content
                 let content = `
-                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-width: 300px;">
                     <div style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                      <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #111827;">${title}</h3>
                       <p style="margin: 0; font-size: 14px; color: #6b7280;">
                         <strong>Layer:</strong> ${layer.name}
                       </p>
@@ -140,22 +148,25 @@ export default function MapView({ layers }: MapViewProps) {
                 
                 // Add key attributes in a clean format
                 const importantFields = ['ADDRESS', 'CITY', 'STATE', 'ZIP', 'PHONE', 'WEBSITE', 
-                                       'STATUS', 'TYPE', 'CATEGORY', 'OWNER', 'OPERATOR']
+                                       'STATUS', 'TYPE', 'CATEGORY', 'OWNER', 'OPERATOR', 'COUNTY']
                 
                 let hasImportantFields = false
+                let displayedFields = new Set(['NAME', 'name', 'FACILITY_NAME', 'facility_name', 
+                                               'SITE_NAME', 'site_name', 'FACNAME', 'facname'])
                 
                 for (const field of importantFields) {
-                  if (attributes[field] || attributes[field.toLowerCase()]) {
-                    const value = attributes[field] || attributes[field.toLowerCase()]
-                    if (value && value !== 'null' && value !== 'NULL') {
-                      hasImportantFields = true
-                      content += `
-                        <p style="margin: 8px 0; font-size: 14px;">
-                          <strong style="color: #374151;">${field.charAt(0) + field.slice(1).toLowerCase()}:</strong>
-                          <span style="color: #4b5563; margin-left: 8px;">${value}</span>
-                        </p>
-                      `
-                    }
+                  const fieldLower = field.toLowerCase()
+                  const value = attributes[field] || attributes[fieldLower]
+                  if (value && value !== 'null' && value !== 'NULL' && value !== 'Null') {
+                    hasImportantFields = true
+                    displayedFields.add(field)
+                    displayedFields.add(fieldLower)
+                    content += `
+                      <p style="margin: 8px 0; font-size: 14px;">
+                        <strong style="color: #374151;">${field.charAt(0) + field.slice(1).toLowerCase()}:</strong>
+                        <span style="color: #4b5563; margin-left: 8px;">${value}</span>
+                      </p>
+                    `
                   }
                 }
                 
@@ -165,10 +176,11 @@ export default function MapView({ layers }: MapViewProps) {
                   for (const [key, value] of Object.entries(attributes)) {
                     if (count >= 5) break
                     if (value && value !== 'null' && value !== 'NULL' && 
-                        !key.startsWith('OBJECTID') && !key.startsWith('Shape')) {
+                        !key.startsWith('OBJECTID') && !key.startsWith('Shape') &&
+                        !key.startsWith('FID') && !displayedFields.has(key)) {
                       content += `
                         <p style="margin: 8px 0; font-size: 14px;">
-                          <strong style="color: #374151;">${key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}:</strong>
+                          <strong style="color: #374151;">${key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase())}:</strong>
                           <span style="color: #4b5563; margin-left: 8px;">${value}</span>
                         </p>
                       `
@@ -180,20 +192,28 @@ export default function MapView({ layers }: MapViewProps) {
                 content += `
                     </div>
                     <div style="padding: 12px 0; border-top: 1px solid #e5e7eb;">
-                      <a href="#" onclick="return false;" style="color: #2563eb; text-decoration: none; font-size: 14px;">
-                        View all attributes (${Object.keys(attributes).length})
-                      </a>
+                      <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                        Total attributes: ${Object.keys(attributes).length}
+                      </p>
                     </div>
                   </div>
                 `
                 
                 return content
               },
-              fieldInfos: [{
-                fieldName: '*',
-                label: '*',
-                visible: true
-              }]
+              outFields: ["*"]
+            })
+
+            // Create a more visible renderer for point features
+            const renderer = new SimpleRenderer.default({
+              symbol: new SimpleMarkerSymbol.default({
+                size: 10,
+                color: [51, 122, 183, 0.8],
+                outline: {
+                  color: [255, 255, 255, 1],
+                  width: 2
+                }
+              })
             })
 
             const featureLayer = new FeatureLayer.default({
@@ -201,8 +221,13 @@ export default function MapView({ layers }: MapViewProps) {
               title: layer.name,
               popupEnabled: true,
               popupTemplate: popupTemplate,
-              outFields: ['*'] // Request all fields for popup
+              outFields: ["*"], // Request all fields
+              renderer: renderer // Make points more visible
             })
+
+            // Wait for layer to load
+            await featureLayer.load()
+            console.log(`Layer ${layer.name} loaded, geometry type:`, featureLayer.geometryType)
 
             viewRef.current.map.add(featureLayer)
             layerRefsRef.current.set(layer.name, featureLayer)
