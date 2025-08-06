@@ -1,17 +1,20 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Layer } from '@/lib/search'
 
 interface MapViewProps {
   layers: Layer[]
 }
 
-export default function MapView({ layers }: MapViewProps) {
+const MapView = forwardRef<any, MapViewProps>(({ layers }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<any>(null)
   const mapLoadedRef = useRef(false)
   const layersRef = useRef<Map<string, any>>(new Map())
+
+  // Expose view ref to parent for export functionality
+  useImperativeHandle(ref, () => viewRef.current)
 
   // Initialize map only once
   useEffect(() => {
@@ -28,10 +31,12 @@ export default function MapView({ layers }: MapViewProps) {
         document.head.appendChild(link)
 
         // Load ArcGIS modules
-        const [Map, MapView, esriConfig] = await Promise.all([
+        const [Map, MapView, esriConfig, BasemapGallery, Expand] = await Promise.all([
           import('@arcgis/core/Map'),
           import('@arcgis/core/views/MapView'),
-          import('@arcgis/core/config')
+          import('@arcgis/core/config'),
+          import('@arcgis/core/widgets/BasemapGallery'),
+          import('@arcgis/core/widgets/Expand')
         ])
 
         console.log('ArcGIS modules loaded')
@@ -41,9 +46,9 @@ export default function MapView({ layers }: MapViewProps) {
           esriConfig.default.apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY
         }
 
-        // Create map
+        // Create map with dark basemap
         const map = new Map.default({
-          basemap: 'topo-vector'
+          basemap: 'dark-gray-vector'
         })
 
         // Create view
@@ -61,11 +66,10 @@ export default function MapView({ layers }: MapViewProps) {
         console.log('Map view ready')
 
         // Add widgets
-        const [Home, Search, Legend, Expand] = await Promise.all([
+        const [Home, Search, Legend] = await Promise.all([
           import('@arcgis/core/widgets/Home'),
           import('@arcgis/core/widgets/Search'),
-          import('@arcgis/core/widgets/Legend'),
-          import('@arcgis/core/widgets/Expand')
+          import('@arcgis/core/widgets/Legend')
         ])
 
         // Home button
@@ -79,6 +83,18 @@ export default function MapView({ layers }: MapViewProps) {
           view: view
         })
         view.ui.add(searchWidget, 'top-right')
+
+        // Basemap Gallery
+        const basemapGallery = new BasemapGallery.default({
+          view: view
+        })
+        const bgExpand = new Expand.default({
+          view: view,
+          content: basemapGallery,
+          expandIcon: 'basemap',
+          expandTooltip: 'Change Basemap'
+        })
+        view.ui.add(bgExpand, 'top-right')
 
         // Legend
         const legend = new Legend.default({
@@ -138,15 +154,37 @@ export default function MapView({ layers }: MapViewProps) {
           try {
             console.log(`Adding layer: ${layer.name}`)
             
-            // Create feature layer
+            // Create feature layer with proper popup
             const featureLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
               title: layer.name,
               outFields: ['*'],
               popupEnabled: true,
               popupTemplate: {
-                title: layer.name,
-                content: `Layer: ${layer.name}<br>Agency: ${layer.agency}`
+                title: '{*}', // This will use the first available field
+                content: async (feature: any) => {
+                  const attributes = feature.graphic.attributes
+                  let content = '<div style="padding: 10px;">'
+                  
+                  // Add all non-null attributes
+                  for (const [key, value] of Object.entries(attributes)) {
+                    if (value && value !== 'null' && 
+                        !key.startsWith('OBJECTID') && 
+                        !key.startsWith('Shape') &&
+                        !key.startsWith('FID')) {
+                      // Format dates
+                      let displayValue = value
+                      if (key.toLowerCase().includes('date') && typeof value === 'number') {
+                        displayValue = new Date(value).toLocaleDateString()
+                      }
+                      content += `<p><strong>${key}:</strong> ${displayValue}</p>`
+                    }
+                  }
+                  
+                  content += `<hr><p style="color: #666; font-size: 12px;">Layer: ${layer.name}<br>Agency: ${layer.agency}</p>`
+                  content += '</div>'
+                  return content
+                }
               }
             })
 
@@ -224,4 +262,8 @@ export default function MapView({ layers }: MapViewProps) {
       )}
     </div>
   )
-}
+})
+
+MapView.displayName = 'MapView'
+
+export default MapView
