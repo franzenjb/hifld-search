@@ -8,6 +8,7 @@ import ExportMapButton from '@/components/ExportMapButton'
 import SaveMapButton from '@/components/SaveMapButton'
 import { searchLayers, type Layer } from '@/lib/search'
 import { fetchActiveHurricanes } from '@/lib/hurricaneService'
+import { fetchActiveWildfires } from '@/lib/wildfireService'
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -15,6 +16,7 @@ export default function Home() {
   const [selectedLayers, setSelectedLayers] = useState<Layer[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hurricaneData, setHurricaneData] = useState<any[]>([])
+  const [wildfireData, setWildfireData] = useState<any[]>([])
   const mapViewRef = useRef<MapViewRef>(null)
 
   const handleSearch = async (query: string) => {
@@ -44,9 +46,17 @@ export default function Home() {
   const handleClearMap = () => {
     setSelectedLayers([])
     setHurricaneData([])
+    setWildfireData([])
   }
 
   const handleHurricanePreset = async () => {
+    // Toggle functionality - if hurricane data exists, clear it
+    if (hurricaneData.length > 0) {
+      setHurricaneData([])
+      setSelectedLayers([])
+      return
+    }
+    
     // Clear existing layers
     setSelectedLayers([])
     
@@ -99,6 +109,67 @@ export default function Home() {
     }
   }
 
+  const handleWildfirePreset = async () => {
+    // Toggle functionality - if wildfire data exists, clear it
+    if (wildfireData.length > 0) {
+      setWildfireData([])
+      setSelectedLayers([])
+      return
+    }
+    
+    // Clear existing layers
+    setSelectedLayers([])
+    setHurricaneData([])
+    
+    // Add loading state
+    setIsLoading(true)
+    
+    try {
+      // Fetch wildfire data from IRWIN
+      const wildfires = await fetchActiveWildfires()
+      
+      if (wildfires.length > 0) {
+        // Add wildfire visualization to map
+        setWildfireData(wildfires)
+        console.log('Active wildfires:', wildfires)
+      }
+      
+      // Auto-search and add relevant infrastructure layers for wildfire response
+      const emergencyLayers = [
+        'fire station',
+        'hospital',
+        'evacuation',
+        'water',
+        'helipad',
+        'airport'
+      ]
+      
+      // Search for each emergency layer type
+      for (const searchTerm of emergencyLayers) {
+        const results = await searchLayers(searchTerm)
+        // Add first few results with map services
+        const layersToAdd = results
+          .filter(layer => layer.serviceUrl)
+          .slice(0, 2) // Limit to prevent overload
+        
+        layersToAdd.forEach(layer => {
+          if (!selectedLayers.find(l => l.name === layer.name)) {
+            setSelectedLayers(prev => [...prev, layer])
+          }
+        })
+      }
+      
+      // Show success message
+      alert(`Wildfire response mode activated!\n${wildfires.length > 0 ? `Tracking ${wildfires.length} active fire(s)` : 'No active fires'}\nEmergency infrastructure layers loaded.`)
+      
+    } catch (error) {
+      console.error('Error loading wildfire preset:', error)
+      alert('Error loading wildfire data. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="h-screen flex flex-col">
       <header className="bg-blue-600 text-white p-4 shadow-lg">
@@ -113,16 +184,24 @@ export default function Home() {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleHurricanePreset()}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-700 text-white text-xs rounded hover:bg-blue-800 transition-colors"
-                  title="Load hurricane tracking and emergency infrastructure"
+                  className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs rounded transition-colors ${
+                    hurricaneData.length > 0 
+                      ? 'bg-orange-600 hover:bg-orange-700' 
+                      : 'bg-blue-700 hover:bg-blue-800'
+                  }`}
+                  title={hurricaneData.length > 0 ? "Click to remove hurricane data" : "Load hurricane tracking and emergency infrastructure"}
                 >
                   <span className="text-sm">🌀</span>
                   <span>Hurricane</span>
                 </button>
                 <button
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-700 text-white text-xs rounded opacity-50 cursor-not-allowed"
-                  disabled
-                  title="Coming soon"
+                  onClick={() => handleWildfirePreset()}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs rounded transition-colors ${
+                    wildfireData.length > 0 
+                      ? 'bg-red-600 hover:bg-red-700' 
+                      : 'bg-blue-700 hover:bg-blue-800'
+                  }`}
+                  title={wildfireData.length > 0 ? "Click to remove wildfire data" : "Load active wildfires and emergency infrastructure"}
                 >
                   <span className="text-sm">🔥</span>
                   <span>Wildfire</span>
@@ -186,15 +265,17 @@ export default function Home() {
                 ))}
               </div>
               
-              {/* Export and Save Buttons */}
-              <div className="space-y-2">
+              {/* Export and Save Buttons - Side by side */}
+              <div className="flex gap-2">
                 <ExportMapButton 
                   layers={selectedLayers} 
                   viewRef={mapViewRef.current?.getView()} 
+                  className="flex-1 text-sm py-2"
                 />
                 <SaveMapButton 
                   layers={selectedLayers} 
                   viewRef={mapViewRef.current?.getView()} 
+                  className="flex-1 text-sm py-2"
                 />
               </div>
             </div>
@@ -202,7 +283,7 @@ export default function Home() {
         </aside>
 
         <main className="flex-1 relative">
-          <MapView ref={mapViewRef} layers={selectedLayers} hurricaneData={hurricaneData} />
+          <MapView ref={mapViewRef} layers={selectedLayers} hurricaneData={hurricaneData} wildfireData={wildfireData} />
         </main>
       </div>
     </div>

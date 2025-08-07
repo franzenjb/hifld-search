@@ -7,13 +7,14 @@ import DOMPurify from 'dompurify'
 interface MapViewProps {
   layers: Layer[]
   hurricaneData?: any[]
+  wildfireData?: any[]
 }
 
 export interface MapViewRef {
   getView: () => any
 }
 
-const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers, hurricaneData }, ref) {
+const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers, hurricaneData, wildfireData }, ref) {
   const mapDiv = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
   const viewInstance = useRef<any>(null)
@@ -350,10 +351,11 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers, 
         const legend = new Legend.default({ 
           view: view,
           style: {
-            type: 'card',
-            layout: 'stack' // Changed from 'auto' to 'stack' for vertical layout
+            type: 'classic', // Changed to 'classic' for better icon display
+            layout: 'stack'
           },
-          container: legendContainer
+          container: legendContainer,
+          respectLayerVisibility: true
         })
         
         const legendExpand = new Expand.default({
@@ -634,6 +636,151 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers, 
       return coords
     }
   }, [hurricaneData])
+
+  // Handle wildfire data visualization
+  useEffect(() => {
+    const addWildfireVisualization = async () => {
+      if (!mapInstance.current || !viewInstance.current || !wildfireData || wildfireData.length === 0) return
+
+      const [Graphic, GraphicsLayer, SimpleMarkerSymbol, TextSymbol, Font, Point, PictureMarkerSymbol] = await Promise.all([
+        import('@arcgis/core/Graphic'),
+        import('@arcgis/core/layers/GraphicsLayer'),
+        import('@arcgis/core/symbols/SimpleMarkerSymbol'),
+        import('@arcgis/core/symbols/TextSymbol'),
+        import('@arcgis/core/symbols/Font'),
+        import('@arcgis/core/geometry/Point'),
+        import('@arcgis/core/symbols/PictureMarkerSymbol')
+      ])
+
+      // Remove existing wildfire layer if any
+      const existingLayer = mapInstance.current.findLayerById('wildfire-layer')
+      if (existingLayer) {
+        mapInstance.current.remove(existingLayer)
+      }
+
+      // Create new graphics layer for wildfires
+      const wildfireLayer = new GraphicsLayer.default({
+        id: 'wildfire-layer',
+        title: 'Active Wildfires (IRWIN)'
+      })
+
+      // Add each wildfire to the map
+      wildfireData.forEach(wildfire => {
+        // Create fire symbol - red/orange gradient circle with size based on acres
+        const fireSize = Math.max(12, Math.min(40, Math.sqrt(wildfire.acres / 100))) // Scale size based on acres
+        
+        const fireSymbol = new SimpleMarkerSymbol.default({
+          style: 'circle',
+          size: fireSize,
+          color: [255, 69, 0, 0.8], // Orange-red
+          outline: {
+            color: [139, 0, 0, 1], // Dark red outline
+            width: 2
+          }
+        })
+
+        // Create fire location point
+        const firePoint = new Point.default({
+          longitude: wildfire.lon,
+          latitude: wildfire.lat
+        })
+
+        // Create fire graphic with popup
+        const fireGraphic = new Graphic.default({
+          geometry: firePoint,
+          symbol: fireSymbol,
+          attributes: wildfire,
+          popupTemplate: {
+            title: `🔥 ${wildfire.name}`,
+            content: `
+              <div style="padding: 10px;">
+                <table style="width: 100%;">
+                  <tr><td><b>Acres:</b></td><td>${wildfire.acres.toLocaleString()} acres</td></tr>
+                  <tr><td><b>Containment:</b></td><td>${wildfire.containment}%</td></tr>
+                  <tr><td><b>Start Date:</b></td><td>${new Date(wildfire.startDate).toLocaleDateString()}</td></tr>
+                  <tr><td><b>Cause:</b></td><td>${wildfire.cause}</td></tr>
+                  <tr><td><b>Status:</b></td><td>${wildfire.status}</td></tr>
+                  <tr><td><b>Location:</b></td><td>${wildfire.lat.toFixed(3)}°N, ${Math.abs(wildfire.lon).toFixed(3)}°W</td></tr>
+                </table>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+                  Source: IRWIN (Integrated Reporting of Wildland-Fire Information)
+                </div>
+              </div>
+            `
+          }
+        })
+
+        wildfireLayer.add(fireGraphic)
+
+        // Add fire name label
+        const labelSymbol = new TextSymbol.default({
+          text: `${wildfire.name} (${wildfire.containment}%)`,
+          color: [255, 255, 255, 1],
+          haloColor: [0, 0, 0, 1],
+          haloSize: 2,
+          font: new Font.default({
+            size: 11,
+            weight: 'bold'
+          }),
+          yoffset: -(fireSize / 2 + 5)
+        })
+
+        const labelGraphic = new Graphic.default({
+          geometry: firePoint,
+          symbol: labelSymbol
+        })
+
+        wildfireLayer.add(labelGraphic)
+
+        // Add containment ring if partially contained
+        if (wildfire.containment > 0 && wildfire.containment < 100) {
+          const containmentSymbol = new SimpleMarkerSymbol.default({
+            style: 'circle',
+            size: fireSize + 8,
+            color: [0, 0, 0, 0], // Transparent fill
+            outline: {
+              color: [0, 255, 0, 0.8], // Green for containment
+              width: 3,
+              style: 'dash'
+            }
+          })
+
+          const containmentGraphic = new Graphic.default({
+            geometry: firePoint,
+            symbol: containmentSymbol
+          })
+
+          wildfireLayer.add(containmentGraphic)
+        }
+      })
+
+      // Add layer to map
+      mapInstance.current.add(wildfireLayer)
+
+      // Zoom to fires extent if multiple fires, or to first fire if single
+      if (wildfireData.length > 0) {
+        if (wildfireData.length === 1) {
+          viewInstance.current.goTo({
+            center: [wildfireData[0].lon, wildfireData[0].lat],
+            zoom: 10
+          })
+        } else {
+          // Calculate extent of all fires
+          const lons = wildfireData.map(f => f.lon)
+          const lats = wildfireData.map(f => f.lat)
+          const extent = {
+            xmin: Math.min(...lons) - 1,
+            ymin: Math.min(...lats) - 1,
+            xmax: Math.max(...lons) + 1,
+            ymax: Math.max(...lats) + 1
+          }
+          viewInstance.current.goTo(extent)
+        }
+      }
+    }
+
+    addWildfireVisualization()
+  }, [wildfireData])
 
   return (
     <div className="relative h-full">

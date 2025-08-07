@@ -6,9 +6,10 @@ import { Layer } from '@/lib/search'
 interface SaveMapButtonProps {
   layers: Layer[]
   viewRef: any
+  className?: string
 }
 
-export default function SaveMapButton({ layers, viewRef }: SaveMapButtonProps) {
+export default function SaveMapButton({ layers, viewRef, className = '' }: SaveMapButtonProps) {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -161,7 +162,7 @@ export default function SaveMapButton({ layers, viewRef }: SaveMapButtonProps) {
     <>
       <button
         onClick={() => setShowDialog(true)}
-        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+        className={`bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 ${className}`}
         disabled={saving}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

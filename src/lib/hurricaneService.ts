@@ -36,38 +36,47 @@ export interface NHCStorm {
 // Fetch active storms from NHC
 export async function fetchActiveHurricanes(): Promise<HurricaneData[]> {
   try {
-    // NHC provides various data feeds - using their JSON feed for active storms
-    const response = await fetch('https://www.nhc.noaa.gov/CurrentStorms.json', {
+    // Use NHC's Active Storms GeoJSON feed
+    const response = await fetch('https://www.nhc.noaa.gov/gis/json/ACTIVE_STORMS.json', {
       cache: 'no-cache' // Always get latest data
     })
     
     if (!response.ok) {
-      console.warn('NHC data not available, using fallback')
+      console.warn('NHC data not available')
       return []
     }
 
     const data = await response.json()
     
-    // Transform NHC data to our format
-    const hurricanes: HurricaneData[] = data.activeStorms?.map((storm: any) => ({
-      id: storm.id,
-      name: storm.name,
-      status: storm.classification,
-      category: getCategoryFromWind(storm.intensityKT),
-      lat: storm.lat,
-      lon: storm.lon,
-      windSpeed: storm.intensityMPH,
-      pressure: storm.pressure,
-      movementDir: storm.movementDEG,
-      movementSpeed: storm.movementMPH,
-      timestamp: storm.lastUpdate
-    })) || []
+    // Transform NHC GeoJSON data to our format
+    const hurricanes: HurricaneData[] = []
+    
+    if (data.features) {
+      data.features.forEach((feature: any) => {
+        const props = feature.properties
+        if (props && feature.geometry) {
+          hurricanes.push({
+            id: props.STORMID || props.id,
+            name: props.STORMNAME || props.name || 'Unknown',
+            status: props.STORMTYPE || 'Disturbance',
+            category: getCategoryFromWind(props.MAXWIND || 0),
+            lat: feature.geometry.coordinates[1],
+            lon: feature.geometry.coordinates[0],
+            windSpeed: props.MAXWIND || 0,
+            pressure: props.MINPRESSURE || 0,
+            movementDir: props.FWDDIR || 0,
+            movementSpeed: props.FWDSPEED || 0,
+            timestamp: props.DTG || new Date().toISOString()
+          })
+        }
+      })
+    }
 
+    console.log('Fetched storms from NHC:', hurricanes)
     return hurricanes
   } catch (error) {
     console.error('Error fetching hurricane data:', error)
-    // Return mock data for demo if NHC is unavailable
-    return getMockHurricaneData()
+    return []
   }
 }
 
@@ -83,30 +92,21 @@ function getCategoryFromWind(windKnots: number): string {
   return 'Tropical Depression'
 }
 
-// Mock data for development/demo
-function getMockHurricaneData(): HurricaneData[] {
-  return [
-    {
-      id: 'demo-hurricane',
-      name: 'Demo Hurricane',
-      status: 'Hurricane',
-      category: 'Category 3',
-      lat: 25.5,
-      lon: -80.5, // Near Miami
-      windSpeed: 120,
-      pressure: 950,
-      movementDir: 315, // Northwest
-      movementSpeed: 12,
-      timestamp: new Date().toISOString(),
-      forecastTrack: [
-        { lat: 25.5, lon: -80.5, timestamp: new Date().toISOString(), windSpeed: 120 },
-        { lat: 26.2, lon: -81.2, timestamp: new Date(Date.now() + 6*3600000).toISOString(), windSpeed: 115 },
-        { lat: 27.0, lon: -82.0, timestamp: new Date(Date.now() + 12*3600000).toISOString(), windSpeed: 110 },
-        { lat: 27.9, lon: -82.8, timestamp: new Date(Date.now() + 24*3600000).toISOString(), windSpeed: 100 },
-        { lat: 29.0, lon: -83.5, timestamp: new Date(Date.now() + 36*3600000).toISOString(), windSpeed: 85 },
-      ]
-    }
-  ]
+// Fetch disturbances and potential cyclones
+export async function fetchDisturbances(): Promise<any[]> {
+  try {
+    const response = await fetch('https://www.nhc.noaa.gov/xgtwo/two_atl_5d0.json', {
+      cache: 'no-cache'
+    })
+    
+    if (!response.ok) return []
+    
+    const data = await response.json()
+    return data.disturbances || []
+  } catch (error) {
+    console.error('Error fetching disturbances:', error)
+    return []
+  }
 }
 
 // Get forecast cone GeoJSON from NHC

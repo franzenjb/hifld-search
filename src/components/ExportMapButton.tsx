@@ -6,9 +6,10 @@ import { Layer } from '@/lib/search'
 interface ExportMapButtonProps {
   layers: Layer[]
   viewRef: any
+  className?: string
 }
 
-export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProps) {
+export default function ExportMapButton({ layers, viewRef, className = '' }: ExportMapButtonProps) {
   const [showDialog, setShowDialog] = useState(false)
   const [mapTitle, setMapTitle] = useState('')
   const [mapDescription, setMapDescription] = useState('')
@@ -195,7 +196,7 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
     <>
       <button
         onClick={() => setShowDialog(true)}
-        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        className={`bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 ${className}`}
         title="Export map for ArcGIS Online"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
