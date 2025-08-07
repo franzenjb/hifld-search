@@ -7,6 +7,7 @@ import MapView, { type MapViewRef } from '@/components/MapView'
 import ExportMapButton from '@/components/ExportMapButton'
 import SaveMapButton from '@/components/SaveMapButton'
 import { searchLayers, type Layer } from '@/lib/search'
+import { fetchActiveHurricanes } from '@/lib/hurricaneService'
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -43,6 +44,58 @@ export default function Home() {
     setSelectedLayers([])
   }
 
+  const handleHurricanePreset = async () => {
+    // Clear existing layers
+    setSelectedLayers([])
+    
+    // Add loading state
+    setIsLoading(true)
+    
+    try {
+      // Fetch hurricane data
+      const hurricanes = await fetchActiveHurricanes()
+      
+      if (hurricanes.length > 0) {
+        // TODO: Add hurricane visualization to map
+        console.log('Active hurricanes:', hurricanes)
+      }
+      
+      // Auto-search and add relevant infrastructure layers
+      const emergencyLayers = [
+        'hospital',
+        'emergency medical',
+        'shelter',
+        'power plant',
+        'airport',
+        'evacuation route'
+      ]
+      
+      // Search for each emergency layer type
+      for (const searchTerm of emergencyLayers) {
+        const results = await searchLayers(searchTerm)
+        // Add first few results with map services
+        const layersToAdd = results
+          .filter(layer => layer.serviceUrl)
+          .slice(0, 2) // Limit to prevent overload
+        
+        layersToAdd.forEach(layer => {
+          if (!selectedLayers.find(l => l.name === layer.name)) {
+            setSelectedLayers(prev => [...prev, layer])
+          }
+        })
+      }
+      
+      // Show success message
+      alert(`Hurricane response mode activated!\n${hurricanes.length > 0 ? `Tracking ${hurricanes.length} active storm(s)` : 'No active storms'}\nEmergency infrastructure layers loaded.`)
+      
+    } catch (error) {
+      console.error('Error loading hurricane preset:', error)
+      alert('Error loading hurricane data. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="h-screen flex flex-col">
       <header className="bg-blue-600 text-white p-4 shadow-lg">
@@ -61,6 +114,41 @@ export default function Home() {
         <aside className="w-96 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
           <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <SearchBar onSearch={handleSearch} />
+            
+            {/* Emergency Presets */}
+            <div className="mt-3">
+              <p className="text-xs text-gray-600 mb-2">Emergency Response Presets</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleHurricanePreset()}
+                  className="flex items-center justify-center gap-1 px-3 py-2 bg-orange-500 text-white text-sm rounded hover:bg-orange-600 transition-colors"
+                >
+                  <span>🌀</span>
+                  <span>Hurricane</span>
+                </button>
+                <button
+                  className="flex items-center justify-center gap-1 px-3 py-2 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors opacity-50 cursor-not-allowed"
+                  disabled
+                >
+                  <span>🔥</span>
+                  <span>Wildfire</span>
+                </button>
+                <button
+                  className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors opacity-50 cursor-not-allowed"
+                  disabled
+                >
+                  <span>🌊</span>
+                  <span>Flood</span>
+                </button>
+                <button
+                  className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors opacity-50 cursor-not-allowed"
+                  disabled
+                >
+                  <span>🌪️</span>
+                  <span>Tornado</span>
+                </button>
+              </div>
+            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto min-h-0">
