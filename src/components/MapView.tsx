@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Layer } from '@/lib/search'
+import DOMPurify from 'dompurify'
 
 interface MapViewProps {
   layers: Layer[]
@@ -43,10 +44,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
           return null
         }
 
-        // Helper to get field value safely
+        // Helper to get field value safely with XSS protection
         const getFieldValue = (fieldNames: string[]): string => {
           const field = findField(fieldNames)
-          return field ? attributes[field].toString() : ''
+          if (!field || !attributes[field]) return ''
+          // Sanitize the value to prevent XSS
+          return DOMPurify.sanitize(attributes[field].toString(), { ALLOWED_TAGS: [] })
         }
 
         // Detect layer type based on name
@@ -246,7 +249,11 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
         </div>`
         
         content += '</div>'
-        return content
+        // Sanitize the entire content before returning
+        return DOMPurify.sanitize(content, {
+          ALLOWED_TAGS: ['div', 'h3', 'h4', 'p', 'table', 'tr', 'td', 'span', 'br', 'a'],
+          ALLOWED_ATTR: ['style', 'href', 'class', 'tel']
+        })
       },
       expressionInfos: [{
         name: "formatted-title",
