@@ -57,12 +57,14 @@ export async function searchLayers(query: string): Promise<Layer[]> {
     return bHasService ? -1 : aHasService ? 1 : 0
   })
 
-  return filtered.map((row) => ({
-    name: row['Layer Name'] || '',
-    agency: row['Agency'] || '',
-    serviceUrl: row['Open REST Service'] || null,
-    status: row['Status'] || '',
-    duaRequired: row['DUA Required'] === 'Yes',
-    giiRequired: row['GII Access Required'] === 'Yes',
-  }))
+  return filtered
+    .slice(0, 100) // Limit to 100 results to prevent endless scrolling
+    .map((row) => ({
+      name: row['Layer Name'] || '',
+      agency: row['Agency'] || '',
+      serviceUrl: row['Open REST Service'] || null,
+      status: row['Status'] || '',
+      duaRequired: row['DUA Required'] === 'Yes',
+      giiRequired: row['GII Access Required'] === 'Yes',
+    }))
 }

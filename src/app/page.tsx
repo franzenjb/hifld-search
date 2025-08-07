@@ -57,13 +57,13 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex-1 flex">
-        <aside className="w-96 bg-gray-50 border-r border-gray-200 flex flex-col">
-          <div className="p-4 border-b border-gray-200">
+      <div className="flex-1 flex overflow-hidden">
+        <aside className="w-96 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
+          <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <SearchBar onSearch={handleSearch} />
           </div>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             <SearchResults 
               results={searchResults}
               isLoading={isLoading}
