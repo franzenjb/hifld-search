@@ -115,23 +115,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
           `
         }
 
-        // Add geometry information (still useful for debugging)
-        const geom = feature.graphic.geometry
-        if (geom) {
-          content += `
-            <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 10px; margin-top: 15px;">
-              <div style="font-weight: bold; color: #155724; margin-bottom: 4px;">🗺️ Geometry Debug Info</div>
-              <div style="font-size: 11px; color: #155724;">
-                <strong>Type:</strong> ${geom.type}<br>
-                ${geom.type === 'point' ? `<strong>Longitude:</strong> ${geom.longitude}<br><strong>Latitude:</strong> ${geom.latitude}` : ''}
-                ${geom.type === 'polygon' && geom.rings ? `<strong>Rings:</strong> ${geom.rings.length}<br><strong>Total Points:</strong> ${geom.rings.flat().length}` : ''}
-                ${geom.type === 'polyline' && geom.paths ? `<strong>Paths:</strong> ${geom.paths.length}<br><strong>Total Points:</strong> ${geom.paths.flat().length}` : ''}
-                <br><strong>Raw Geometry Object:</strong>
-                <pre style="background: #ffffff; border: 1px solid #c3e6cb; padding: 4px; border-radius: 2px; overflow-x: auto; font-size: 10px; margin-top: 4px; white-space: pre-wrap;">${JSON.stringify(geom, null, 2)}</pre>
-              </div>
-            </div>
-          `
-        }
 
         content += '</div>'
         return content

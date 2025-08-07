@@ -24,16 +24,19 @@ npm start
 # Run linter
 npm run lint
 
-# Deploy to Vercel (auto-deploys on git push)
+# Type checking (no test suite exists)
+npx tsc --noEmit
+
+# Deploy to Vercel (auto-deploys on git push to main)
 vercel
 ```
 
-## TypeScript Configuration
+## Critical Workflow Requirements
 
-- **Strict mode**: Enabled (`strict: true`)
-- **Path alias**: `@/*` maps to `./src/*`
-- **Target**: ES5 for broad compatibility
-- **Module resolution**: Bundler mode for Next.js compatibility
+**IMPORTANT**: User requires all updates to be committed to GitHub AND deployed to Vercel. After making changes:
+1. Commit and push to GitHub
+2. Vercel auto-deploys from main branch
+3. Deployment takes 2-3 minutes
 
 ## Environment Configuration
 
@@ -58,48 +61,58 @@ APP_PASSWORD=your_secure_password_here
 - **Data Processing**: PapaParse for CSV parsing
 - **HTTP Client**: Axios for API requests
 
-### Core Components Flow
+### Core Data Flow
 
-1. **Password Protection** (`PasswordProtection.tsx`)
-   - Wraps entire app in `layout.tsx`
-   - Uses HTTP-only cookies with 7-day expiration
-   - Middleware (`middleware.ts`) protects API routes
+1. **Layer Discovery**: CSV file (`/public/HIFLD_Open_Crosswalk_Geoplatform.csv`) contains ~200 infrastructure layers with metadata
+2. **Search**: User searches layers → filtered by availability of `Open REST Service` URL
+3. **Map Addition**: Selected layers added as ArcGIS FeatureLayers to the map
+4. **Interaction**: Popups show raw feature data, widgets provide map controls
+5. **Export**: Two paths - JSON download or direct save to ArcGIS Online
 
-2. **Search Pipeline**
-   - `SearchBar.tsx` → `searchLayers()` in `lib/search.ts` → `SearchResults.tsx`
-   - CSV data loaded from `/public/HIFLD_Open_Crosswalk_Geoplatform.csv`
-   - Results filtered by service URL availability
+### Component Architecture
 
-3. **Map Visualization** (`MapView.tsx`)
-   - Uses forwardRef to expose ArcGIS view instance
-   - Dynamic imports for ArcGIS modules (performance optimization)
-   - Handles multiple geometry types (point, polygon)
-   - Custom popups with layer-specific field rendering
+```
+page.tsx (orchestrator)
+    ├── PasswordProtection.tsx (wrapper)
+    ├── SearchBar.tsx → lib/search.ts
+    ├── SearchResults.tsx
+    ├── MapView.tsx (forwardRef)
+    │   ├── Dynamic ArcGIS module imports
+    │   ├── Popup templates (raw data display)
+    │   └── Widgets (BasemapGallery, Legend, Search, Home)
+    ├── ExportMapButton.tsx (JSON download)
+    └── SaveMapButton.tsx (ArcGIS Online save)
+```
 
-4. **Export/Save Features**
-   - **ExportMapButton**: Downloads JSON config with metadata (no login required)
-   - **SaveMapButton**: Saves to ArcGIS Online (requires user authentication)
-   - Both auto-populate title, description, and tags from selected layers
+### State Management
+- All state managed in `page.tsx` using React hooks
+- `selectedLayers`: Array of active layers on map
+- `mapViewRef`: Reference to ArcGIS view for export/save operations
+- Components communicate via props and callbacks
 
-### Key Architectural Decisions
+### Authentication Flow
+1. `PasswordProtection.tsx` checks for `hifld-auth` cookie
+2. If missing, shows password form
+3. On success, sets HTTP-only cookie (7-day expiration)
+4. `middleware.ts` protects `/api/*` routes using same cookie
 
-- **Client-side rendering**: All interactive components use 'use client'
-- **Dynamic loading**: ArcGIS CSS/JS loaded on-demand to prevent blocking
-- **State management**: React hooks in page.tsx coordinate all components
-- **Error handling**: Try-catch blocks around all ArcGIS operations
-- **Security**: Middleware protects API routes, environment vars for sensitive data
-- **No testing framework**: Project has no test suite configured
+## Recent Architecture Changes
 
-### API Routes
+### Popup System Evolution
+- Started with field-specific popups (showing select fields)
+- Evolved to category-based system (11 categories, rich formatting)
+- Current: Raw data display showing ALL fields unfiltered for debugging
 
-- `/api/auth/route.ts`: ArcGIS OAuth token generation (unused in current flow)
-- `/api/auth/verify/route.ts`: Password verification and cookie management
+### Export Functionality
+- Creates Web Map JSON compatible with ArcGIS Online
+- Note: Direct upload via "New item → Your device" doesn't work
+- Users should use ArcGIS Online Assistant or Python API instead
 
-### Middleware Configuration
-
-- Protects all `/api/*` routes except `/api/auth/verify`
-- Checks for `hifld-auth` cookie with value `authenticated`
-- Returns 401 Unauthorized for unauthenticated API requests
+### Widget Configuration
+- **BasemapGallery**: Top-left, expandable
+- **Legend**: Bottom-right, expandable, card style
+- **Search**: Top-right corner
+- **Home**: Top-left below BasemapGallery
 
 ## Data Schema (CSV)
 
@@ -111,29 +124,22 @@ Critical columns for functionality:
 - `DUA Required`: Data Use Agreement flag
 - `GII Access Required`: Restricted access flag
 
-## Common Tasks
+## Known Issues & Workarounds
 
-### Adding New Features to Export
-1. Update `ExportMapButton.tsx` to capture additional data
-2. Modify the `mapConfig` object structure
-3. Document new fields in export dialog
+### Popup Data Display
+Some layers (e.g., State Capitols, Prison Boundaries) show minimal data. Current popup system shows raw attributes to help debug why certain layers have limited fields.
 
-### Debugging Map Layer Issues
-- Check browser console for CORS errors
-- Verify service URL is valid and accessible
-- Some layers require authentication (DUA/GII)
-- Check `MapView.tsx` error handlers
+### Export to ArcGIS Online
+The exported JSON requires manual import via:
+- ArcGIS Online Assistant (ago-assistant.esri.com)
+- ArcGIS Python API in notebooks
+- Custom OAuth application
 
-### Modifying Auto-population Logic
-- Title generation: Lines 24-28 in Export/SaveMapButton
-- Description: Lines 31-35
-- Tag extraction: Lines 38-61 (includes keyword matching)
-
-### Running Type Checks
-```bash
-# TypeScript compilation check (no emit)
-npx tsc --noEmit
-```
+### Layer Loading
+Some layers may fail due to:
+- CORS restrictions
+- Authentication requirements (DUA/GII)
+- Service availability
 
 ## Deployment
 
@@ -143,28 +149,6 @@ npx tsc --noEmit
 - Deployment typically completes in 2-3 minutes
 - Region: IAD1 (US East)
 
-## Project Structure
-
-```
-src/
-├── app/
-│   ├── api/          # API route handlers
-│   ├── globals.css   # Global styles with Tailwind
-│   ├── layout.tsx    # Root layout with password protection
-│   └── page.tsx      # Main page with state coordination
-├── components/       # React components
-├── lib/              # Utility functions
-└── middleware.ts     # Request authentication
-```
-
-## Python Scripts
-
-The repository includes several Python scripts for prototyping and data exploration:
-- `hifld_search_poc.py`: Original proof of concept
-- `hifld_interactive.py`: Interactive terminal version
-- `hifld_interactive_auth.py`: Version with authentication
-- Various Jupyter notebooks for data analysis
-
-## User Instructions Note
+## User Requirements
 
 **IMPORTANT**: Always provide complete file replacements, never partial edits. This is a strict requirement from the user.
