@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import SearchBar from '@/components/SearchBar'
 import SearchResults from '@/components/SearchResults'
-import MapView from '@/components/MapView'
+import MapView, { type MapViewRef } from '@/components/MapView'
+import ExportMapButton from '@/components/ExportMapButton'
+import SaveMapButton from '@/components/SaveMapButton'
 import { searchLayers, type Layer } from '@/lib/search'
 
 export default function Home() {
@@ -11,6 +13,7 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<Layer[]>([])
   const [selectedLayers, setSelectedLayers] = useState<Layer[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const mapViewRef = useRef<MapViewRef>(null)
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query)
@@ -82,7 +85,7 @@ export default function Home() {
                   Clear All
                 </button>
               </div>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
+              <div className="space-y-1 max-h-32 overflow-y-auto mb-4">
                 {selectedLayers.map((layer) => (
                   <div key={layer.name} className="flex items-center justify-between text-sm">
                     <span className="truncate text-gray-600">{layer.name}</span>
@@ -95,12 +98,24 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+              
+              {/* Export and Save Buttons */}
+              <div className="space-y-2">
+                <ExportMapButton 
+                  layers={selectedLayers} 
+                  viewRef={mapViewRef.current?.getView()} 
+                />
+                <SaveMapButton 
+                  layers={selectedLayers} 
+                  viewRef={mapViewRef.current?.getView()} 
+                />
+              </div>
             </div>
           )}
         </aside>
 
         <main className="flex-1 relative">
-          <MapView layers={selectedLayers} />
+          <MapView ref={mapViewRef} layers={selectedLayers} />
         </main>
       </div>
     </div>
