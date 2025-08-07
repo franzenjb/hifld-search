@@ -28,6 +28,20 @@ const LAYER_TYPE_CONFIGS: Record<string, LayerTypeConfig> = {
     displayFields: ['NAME', 'ADDRESS', 'CITY', 'STATE', 'ZIP', 'PHONE', 'TYPE', 'STATUS'],
     titleField: 'NAME'
   },
+  fire_perimeter: {
+    keywords: ['fire perimeter', 'wildfire', 'wildland fire', 'wfigs', 'geomac', 'fire boundary'],
+    displayFields: [
+      'FIRE_NAME', 'INCIDENT_NAME', 'FIRE_ID', 'INCIDENT_ID',
+      'FIRE_YEAR', 'STARTDATE', 'DATE_', 'CREATEDATE', 'MODIFIEDDATE',
+      'ACRES', 'GISACRES', 'TOTALACRES', 'AREA_',
+      'PERCENTCONTAINED', 'CONTAINMENTDATE', 'CONTROL_DATE',
+      'FIRE_TYPE', 'CAUSE', 'INCIDENTTYPE',
+      'STATE', 'COUNTY', 'UNITID', 'LOCALUNITID',
+      'AGENCY', 'UNIT', 'SOURCE', 'GACC',
+      'COMMENTS', 'COMPLEXNAME', 'COMPLEXID'
+    ],
+    titleField: 'FIRE_NAME'
+  },
   medical: {
     keywords: ['hospital', 'medical', 'health', 'clinic', 'nursing', 'care center'],
     displayFields: ['NAME', 'ADDRESS', 'CITY', 'STATE', 'ZIP', 'PHONE', 'BEDS', 'TYPE', 'OWNER'],
@@ -201,6 +215,39 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
     const field = fieldName.toUpperCase()
     const strValue = String(value)
     
+    // Format fire-specific fields
+    if (field.includes('ACRES') || field.includes('AREA')) {
+      const num = Number(strValue)
+      if (!isNaN(num)) {
+        return `${num.toLocaleString()} acres`
+      }
+    }
+    
+    if (field.includes('PERCENT') && field.includes('CONTAIN')) {
+      const num = Number(strValue)
+      if (!isNaN(num)) {
+        return `${num}%`
+      }
+    }
+    
+    // Format dates
+    if (field.includes('DATE') || field.includes('YEAR')) {
+      // Handle timestamp (milliseconds since epoch)
+      if (/^\d{13}$/.test(strValue)) {
+        const date = new Date(Number(strValue))
+        return date.toLocaleDateString('en-US')
+      }
+      // Handle year only
+      if (/^\d{4}$/.test(strValue)) {
+        return strValue
+      }
+      // Handle other date formats
+      const date = new Date(strValue)
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-US')
+      }
+    }
+    
     // Format phone numbers
     if (field.includes('PHONE') || field.includes('TEL')) {
       const cleaned = strValue.replace(/\D/g, '')
@@ -227,7 +274,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
       if (field.includes('CAPACITY') && Number(strValue) > 1000) {
         return Number(strValue).toLocaleString()
       }
-      if (field.includes('AREA') && Number(strValue) > 100) {
+      if (field.includes('AREA') && Number(strValue) > 100 && !field.includes('ACRES')) {
         return `${Number(strValue).toLocaleString()} sq ft`
       }
     }
@@ -272,21 +319,37 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
 
       // Add widgets after view is ready
       view.when(async () => {
-        const [Home, Search, Legend, Expand] = await Promise.all([
+        const [Home, Search, Legend, BasemapGallery, Expand] = await Promise.all([
           import('@arcgis/core/widgets/Home'),
           import('@arcgis/core/widgets/Search'),
           import('@arcgis/core/widgets/Legend'),
+          import('@arcgis/core/widgets/BasemapGallery'),
           import('@arcgis/core/widgets/Expand')
         ])
 
         view.ui.add(new Home.default({ view }), 'top-left')
         view.ui.add(new Search.default({ view }), 'top-right')
         
+        // Add BasemapGallery widget
+        const basemapGallery = new BasemapGallery.default({ 
+          view: view,
+          container: document.createElement('div')
+        })
+        const basemapExpand = new Expand.default({
+          view: view,
+          content: basemapGallery,
+          expandIcon: 'basemap',
+          expandTooltip: 'Change Basemap'
+        })
+        view.ui.add(basemapExpand, 'top-left')
+        
+        // Add Legend widget
         const legend = new Legend.default({ view })
         const legendExpand = new Expand.default({
           view: view,
           content: legend,
-          expandIcon: 'legend'
+          expandIcon: 'legend',
+          expandTooltip: 'Layer Legend'
         })
         view.ui.add(legendExpand, 'bottom-left')
       })
