@@ -340,20 +340,10 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
         })
         view.ui.add(basemapExpand, 'top-left')
         
-        // Add Legend widget with fixed width
-        const legendContainer = document.createElement('div')
-        legendContainer.style.maxWidth = '300px'
-        legendContainer.style.maxHeight = '400px'
-        legendContainer.style.overflow = 'auto'
-        
+        // Add Legend widget with proper configuration
         const legend = new Legend.default({ 
           view: view,
-          style: {
-            type: 'classic', // Changed to 'classic' for better icon display
-            layout: 'stack'
-          },
-          container: legendContainer,
-          respectLayerVisibility: true
+          layerInfos: [] // Start empty, will populate as layers load
         })
         
         const legendExpand = new Expand.default({
@@ -366,6 +356,9 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
           group: 'bottom-right'
         })
         view.ui.add(legendExpand, 'bottom-right')
+        
+        // Store legend reference for later updates
+        ;(window as any).__arcgisLegend = legend
       })
     }
 
@@ -410,11 +403,32 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
               title: layer.name,
               outFields: ["*"],
               popupEnabled: true,
-              popupTemplate: createPopupTemplate(layer)
+              popupTemplate: createPopupTemplate(layer),
+              // Ensure the renderer is loaded
+              refreshInterval: 0.1 // This forces immediate rendering
             })
 
+            // Add layer to map immediately
             mapInstance.current.add(featureLayer)
             layerRefs.current.set(layer.serviceUrl, featureLayer)
+            
+            // Wait for layer to load then update legend
+            featureLayer.when(() => {
+              // Force legend to recognize the new layer
+              if ((window as any).__arcgisLegend && viewInstance.current) {
+                const legend = (window as any).__arcgisLegend
+                // Update legend's layerInfos to include all operational layers
+                const layerInfos = viewInstance.current.map.layers.items
+                  .filter((layer: any) => layer.type === 'feature')
+                  .map((layer: any) => ({ 
+                    layer: layer,
+                    title: layer.title
+                  }))
+                legend.layerInfos = layerInfos
+              }
+            }).catch((error: any) => {
+              console.error(`Failed to load layer ${layer.name}:`, error)
+            })
 
             // Don't auto-zoom - let user control the view
             // Some layers have global extents that zoom out too far
