@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
-const APP_PASSWORD = process.env.APP_PASSWORD || 'hifld2024'
+const APP_PASSWORD = process.env.APP_PASSWORD || 'redcross'
 
 export async function POST(request: NextRequest) {
   try {

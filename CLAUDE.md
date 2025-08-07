@@ -72,7 +72,7 @@ ARCGIS_CLIENT_ID=your_client_id_here
 ARCGIS_CLIENT_SECRET=your_client_secret_here
 
 # App access password (defaults to 'hifld2024')
-APP_PASSWORD=your_secure_password_here
+APP_PASSWORD=redcross
 ```
 
 ## Architecture
