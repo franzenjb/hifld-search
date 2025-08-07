@@ -387,7 +387,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
 
       // Add new layers
       for (const layer of layers) {
-        if (!layerRefs.current.has(layer.serviceUrl)) {
+        if (layer.serviceUrl && !layerRefs.current.has(layer.serviceUrl)) {
           try {
             const featureLayer = new FeatureLayer.default({
               url: layer.serviceUrl,
