@@ -28,6 +28,13 @@ npm run lint
 vercel
 ```
 
+## TypeScript Configuration
+
+- **Strict mode**: Enabled (`strict: true`)
+- **Path alias**: `@/*` maps to `./src/*`
+- **Target**: ES5 for broad compatibility
+- **Module resolution**: Bundler mode for Next.js compatibility
+
 ## Environment Configuration
 
 Required `.env.local` variables:
@@ -42,6 +49,14 @@ APP_PASSWORD=your_secure_password_here
 ```
 
 ## Architecture
+
+### Technology Stack
+- **Framework**: Next.js 14.0.4 (App Router)
+- **UI**: React 18.2 with TypeScript
+- **Styling**: Tailwind CSS 3.3
+- **Mapping**: @arcgis/core 4.28
+- **Data Processing**: PapaParse for CSV parsing
+- **HTTP Client**: Axios for API requests
 
 ### Core Components Flow
 
@@ -73,11 +88,18 @@ APP_PASSWORD=your_secure_password_here
 - **State management**: React hooks in page.tsx coordinate all components
 - **Error handling**: Try-catch blocks around all ArcGIS operations
 - **Security**: Middleware protects API routes, environment vars for sensitive data
+- **No testing framework**: Project has no test suite configured
 
 ### API Routes
 
 - `/api/auth/route.ts`: ArcGIS OAuth token generation (unused in current flow)
 - `/api/auth/verify/route.ts`: Password verification and cookie management
+
+### Middleware Configuration
+
+- Protects all `/api/*` routes except `/api/auth/verify`
+- Checks for `hifld-auth` cookie with value `authenticated`
+- Returns 401 Unauthorized for unauthenticated API requests
 
 ## Data Schema (CSV)
 
@@ -107,12 +129,41 @@ Critical columns for functionality:
 - Description: Lines 31-35
 - Tag extraction: Lines 38-61 (includes keyword matching)
 
+### Running Type Checks
+```bash
+# TypeScript compilation check (no emit)
+npx tsc --noEmit
+```
+
 ## Deployment
 
 - GitHub repository: `https://github.com/franzenjb/hifld-search`
 - Vercel auto-deploys on push to main branch
 - Environment variables must be set in Vercel dashboard
 - Deployment typically completes in 2-3 minutes
+- Region: IAD1 (US East)
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── api/          # API route handlers
+│   ├── globals.css   # Global styles with Tailwind
+│   ├── layout.tsx    # Root layout with password protection
+│   └── page.tsx      # Main page with state coordination
+├── components/       # React components
+├── lib/              # Utility functions
+└── middleware.ts     # Request authentication
+```
+
+## Python Scripts
+
+The repository includes several Python scripts for prototyping and data exploration:
+- `hifld_search_poc.py`: Original proof of concept
+- `hifld_interactive.py`: Interactive terminal version
+- `hifld_interactive_auth.py`: Version with authentication
+- Various Jupyter notebooks for data analysis
 
 ## User Instructions Note
 
