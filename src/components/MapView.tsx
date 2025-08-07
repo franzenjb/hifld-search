@@ -11,71 +11,6 @@ export interface MapViewRef {
   getView: () => any
 }
 
-// Field grouping and categorization for better organization
-interface FieldCategory {
-  name: string
-  keywords: string[]
-  priority: number
-}
-
-const FIELD_CATEGORIES: FieldCategory[] = [
-  {
-    name: 'Identification',
-    keywords: ['name', 'id', 'code', 'number', 'callsign', 'facility', 'site', 'location', 'title'],
-    priority: 1
-  },
-  {
-    name: 'Location & Address',
-    keywords: ['address', 'street', 'city', 'state', 'zip', 'postal', 'county', 'lat', 'lon', 'coord', 'x', 'y'],
-    priority: 2
-  },
-  {
-    name: 'Contact Information',
-    keywords: ['phone', 'tel', 'fax', 'email', 'contact', 'website', 'url', 'web'],
-    priority: 3
-  },
-  {
-    name: 'Classification & Type',
-    keywords: ['type', 'class', 'category', 'kind', 'classification', 'level', 'grade', 'status'],
-    priority: 4
-  },
-  {
-    name: 'Organizational',
-    keywords: ['owner', 'operator', 'agency', 'organization', 'company', 'authority', 'department', 'branch', 'unit'],
-    priority: 5
-  },
-  {
-    name: 'Temporal Information',
-    keywords: ['date', 'time', 'year', 'created', 'modified', 'updated', 'start', 'end', 'built', 'established'],
-    priority: 6
-  },
-  {
-    name: 'Physical Characteristics',
-    keywords: ['height', 'elevation', 'area', 'acres', 'capacity', 'size', 'length', 'width', 'depth', 'volume', 'beds', 'enrollment'],
-    priority: 7
-  },
-  {
-    name: 'Fire/Emergency Data',
-    keywords: ['fire', 'incident', 'emergency', 'acres', 'contain', 'cause', 'percent', 'complex', 'gacc'],
-    priority: 8
-  },
-  {
-    name: 'Technical Specifications',
-    keywords: ['frequency', 'power', 'voltage', 'bandwidth', 'signal', 'transmission', 'antenna', 'equipment'],
-    priority: 9
-  },
-  {
-    name: 'Administrative & Metadata',
-    keywords: ['source', 'accuracy', 'quality', 'version', 'revision', 'method', 'datum', 'projection', 'scale'],
-    priority: 10
-  },
-  {
-    name: 'Additional Information',
-    keywords: ['description', 'comment', 'note', 'remark', 'detail', 'info', 'misc', 'other'],
-    priority: 11
-  }
-]
-
 const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }, ref) {
   const mapDiv = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
@@ -87,143 +22,113 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
     getView: () => viewInstance.current
   }))
 
-  // Categorize fields based on their names
-  const categorizeField = (fieldName: string): string => {
-    const name = fieldName.toLowerCase()
-    
-    for (const category of FIELD_CATEGORIES) {
-      if (category.keywords.some(keyword => name.includes(keyword))) {
-        return category.name
-      }
-    }
-    
-    return 'Additional Information' // default category
-  }
-
-  // Get priority for sorting categories
-  const getCategoryPriority = (categoryName: string): number => {
-    const category = FIELD_CATEGORIES.find(c => c.name === categoryName)
-    return category ? category.priority : 99
-  }
-
-  // Create comprehensive popup template that shows ALL fields
+  // Create popup template that shows ALL raw fields with NO filtering
   const createPopupTemplate = (layer: Layer) => {
     return {
-      title: `${layer.name}`,
+      title: `${layer.name} - RAW DATA VIEW`,
       content: (feature: any) => {
         const attributes = feature.graphic.attributes
         const allFields = Object.keys(attributes)
         
-        // Filter out empty/null values and system fields
-        const meaningfulFields = allFields.filter(field => {
-          const value = attributes[field]
-          // Skip if null, undefined, empty string, or common system fields
-          if (value == null || value === '' || value === ' ') return false
-          
-          const fieldLower = field.toLowerCase()
-          // Skip common system/geometry fields that aren't user-meaningful
-          if (fieldLower.includes('objectid') || 
-              fieldLower.includes('globalid') ||
-              fieldLower.includes('shape_') ||
-              fieldLower.includes('esri_') ||
-              fieldLower === 'oid' ||
-              fieldLower === 'fid') {
-            return false
-          }
-          
-          return true
-        })
-
-        // Group fields by category
-        const fieldsByCategory: Record<string, string[]> = {}
-        meaningfulFields.forEach(field => {
-          const category = categorizeField(field)
-          if (!fieldsByCategory[category]) {
-            fieldsByCategory[category] = []
-          }
-          fieldsByCategory[category].push(field)
-        })
-
-        // Sort categories by priority
-        const sortedCategories = Object.keys(fieldsByCategory).sort((a, b) => 
-          getCategoryPriority(a) - getCategoryPriority(b)
-        )
-
-        // Create content HTML
+        // Sort all fields alphabetically for consistent display
+        const sortedFields = allFields.sort()
+        
+        // Create content HTML - simple table format showing everything
         let content = `
-          <div style="max-width: 500px; max-height: 600px; overflow-y: auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-            <div style="background: linear-gradient(135deg, #2c5aa0 0%, #1e3a5f 100%); color: white; padding: 12px; margin: -10px -10px 15px -10px; border-radius: 6px 6px 0 0;">
-              <div style="font-size: 16px; font-weight: bold; margin-bottom: 4px;">📍 Feature Details</div>
-              <div style="font-size: 13px; opacity: 0.9;">
-                <strong>Layer:</strong> ${layer.name}<br>
-                <strong>Source:</strong> ${layer.agency}
-              </div>
+          <div style="max-width: 600px; max-height: 700px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+            <div style="background: #dc3545; color: white; padding: 8px; margin: -10px -10px 15px -10px; text-align: center;">
+              <div style="font-weight: bold;">RAW FEATURE DATA - ALL FIELDS SHOWN</div>
+              <div style="font-size: 11px;">Layer: ${layer.name} | Source: ${layer.agency}</div>
+              <div style="font-size: 11px;">Total Fields: ${sortedFields.length}</div>
             </div>
         `
 
-        if (sortedCategories.length === 0) {
+        // Add debug section with raw attributes object
+        content += `
+          <div style="background: #f8f9fa; border: 2px solid #dc3545; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+            <div style="font-weight: bold; color: #dc3545; margin-bottom: 8px;">🐛 DEBUG: Raw Attributes Object</div>
+            <pre style="background: #ffffff; border: 1px solid #ddd; padding: 8px; border-radius: 2px; overflow-x: auto; font-size: 10px; white-space: pre-wrap; word-wrap: break-word;">${JSON.stringify(attributes, null, 2)}</pre>
+          </div>
+        `
+
+        // Show ALL fields in simple table format
+        if (sortedFields.length === 0) {
           content += `
-            <div style="text-align: center; padding: 20px; color: #666; font-style: italic;">
-              <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
-              No detailed information available for this feature.
+            <div style="text-align: center; padding: 20px; color: #dc3545; font-weight: bold;">
+              ERROR: No attributes found in feature!
             </div>
           `
         } else {
-          // Add field count summary
-          const totalFields = meaningfulFields.length
           content += `
-            <div style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 8px; margin-bottom: 15px; font-size: 13px; color: #666;">
-              📊 Showing <strong>${totalFields}</strong> data field${totalFields !== 1 ? 's' : ''} across <strong>${sortedCategories.length}</strong> categor${sortedCategories.length !== 1 ? 'ies' : 'y'}
-            </div>
+            <div style="background: #ffffff; border: 1px solid #ddd; border-radius: 4px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                <thead>
+                  <tr style="background: #f8f9fa;">
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: bold; width: 40%;">Field Name (Raw)</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: bold; width: 15%;">Type</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: bold; width: 45%;">Value (Raw)</th>
+                  </tr>
+                </thead>
+                <tbody>
           `
 
-          // Add each category with its fields
-          sortedCategories.forEach((categoryName, categoryIndex) => {
-            const categoryFields = fieldsByCategory[categoryName]
+          // Add every single field - NO FILTERING
+          sortedFields.forEach(field => {
+            const value = attributes[field]
+            const valueType = typeof value
+            const displayValue = value === null ? 'NULL' : 
+                               value === undefined ? 'UNDEFINED' : 
+                               value === '' ? 'EMPTY_STRING' :
+                               String(value)
             
-            // Get category icon
-            const categoryIcon = getCategoryIcon(categoryName)
+            // Color coding based on value type/content
+            let rowColor = '#ffffff'
+            let valueColor = '#000000'
+            
+            if (value === null || value === undefined) {
+              rowColor = '#fff3cd'  // Light yellow for null/undefined
+              valueColor = '#856404'
+            } else if (value === '') {
+              rowColor = '#f8d7da'  // Light red for empty strings
+              valueColor = '#721c24'
+            } else if (field.toLowerCase().includes('objectid') || 
+                      field.toLowerCase().includes('globalid') || 
+                      field.toLowerCase().includes('shape_') || 
+                      field.toLowerCase().includes('esri_')) {
+              rowColor = '#e2e3e5'  // Light gray for system fields
+              valueColor = '#383d41'
+            }
             
             content += `
-              <div style="margin-bottom: 20px;">
-                <div style="background: #f8f9fa; border-left: 4px solid #2c5aa0; padding: 8px 12px; margin-bottom: 10px; border-radius: 0 4px 4px 0;">
-                  <div style="font-weight: bold; color: #2c5aa0; font-size: 14px;">
-                    ${categoryIcon} ${categoryName} (${categoryFields.length})
-                  </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px 12px; align-items: start; margin-left: 16px;">
+              <tr style="background: ${rowColor};">
+                <td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; color: #495057; word-break: break-all;">${field}</td>
+                <td style="border: 1px solid #ddd; padding: 6px; color: #6c757d; font-style: italic;">${valueType}</td>
+                <td style="border: 1px solid #ddd; padding: 6px; color: ${valueColor}; word-break: break-word; max-width: 200px;">${displayValue.length > 100 ? displayValue.substring(0, 97) + '...' : displayValue}</td>
+              </tr>
             `
-
-            // Sort fields within category alphabetically
-            categoryFields.sort().forEach(field => {
-              const value = attributes[field]
-              const displayName = formatFieldName(field)
-              const formattedValue = formatFieldValue(value, field)
-              
-              content += `
-                <div style="font-weight: 600; color: #495057; font-size: 13px; padding: 4px 0;">
-                  ${displayName}:
-                </div>
-                <div style="word-break: break-word; font-size: 13px; padding: 4px 0; line-height: 1.4;">
-                  ${formattedValue}
-                </div>
-              `
-            })
-
-            content += '</div></div>'
           })
+          
+          content += `
+                </tbody>
+              </table>
+            </div>
+          `
         }
 
-        // Add geometry information
+        // Add geometry information (still useful for debugging)
         const geom = feature.graphic.geometry
         if (geom) {
           content += `
-            <div style="background: #e8f4fd; border: 1px solid #bee5eb; border-radius: 4px; padding: 10px; margin-top: 15px; font-size: 12px; color: #0c5460;">
-              <div style="font-weight: bold; margin-bottom: 4px;">🗺️ Geometry Information</div>
-              <div><strong>Type:</strong> ${formatGeometryType(geom.type)}</div>
-              ${geom.type === 'point' ? `<div><strong>Coordinates:</strong> ${geom.longitude?.toFixed(6)}, ${geom.latitude?.toFixed(6)}</div>` : ''}
-              ${geom.type === 'polygon' && geom.rings ? `<div><strong>Vertices:</strong> ${geom.rings.flat().length} points</div>` : ''}
-              ${geom.type === 'polyline' && geom.paths ? `<div><strong>Vertices:</strong> ${geom.paths.flat().length} points</div>` : ''}
+            <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 10px; margin-top: 15px;">
+              <div style="font-weight: bold; color: #155724; margin-bottom: 4px;">🗺️ Geometry Debug Info</div>
+              <div style="font-size: 11px; color: #155724;">
+                <strong>Type:</strong> ${geom.type}<br>
+                ${geom.type === 'point' ? `<strong>Longitude:</strong> ${geom.longitude}<br><strong>Latitude:</strong> ${geom.latitude}` : ''}
+                ${geom.type === 'polygon' && geom.rings ? `<strong>Rings:</strong> ${geom.rings.length}<br><strong>Total Points:</strong> ${geom.rings.flat().length}` : ''}
+                ${geom.type === 'polyline' && geom.paths ? `<strong>Paths:</strong> ${geom.paths.length}<br><strong>Total Points:</strong> ${geom.paths.flat().length}` : ''}
+                <br><strong>Raw Geometry Object:</strong>
+                <pre style="background: #ffffff; border: 1px solid #c3e6cb; padding: 4px; border-radius: 2px; overflow-x: auto; font-size: 10px; margin-top: 4px; white-space: pre-wrap;">${JSON.stringify(geom, null, 2)}</pre>
+              </div>
             </div>
           `
         }
@@ -232,189 +137,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
         return content
       }
     }
-  }
-
-  // Get icon for category
-  const getCategoryIcon = (categoryName: string): string => {
-    const icons: Record<string, string> = {
-      'Identification': '🏷️',
-      'Location & Address': '📍',
-      'Contact Information': '📞',
-      'Classification & Type': '📂',
-      'Organizational': '🏢',
-      'Temporal Information': '📅',
-      'Physical Characteristics': '📏',
-      'Fire/Emergency Data': '🔥',
-      'Technical Specifications': '⚙️',
-      'Administrative & Metadata': '📋',
-      'Additional Information': '📝'
-    }
-    return icons[categoryName] || '📌'
-  }
-
-  // Format field names for display
-  const formatFieldName = (fieldName: string): string => {
-    return fieldName
-      .replace(/_/g, ' ')
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/\b\w/g, l => l.toUpperCase())
-      .trim()
-  }
-
-  // Format geometry type for display
-  const formatGeometryType = (type: string): string => {
-    const types: Record<string, string> = {
-      'point': 'Point Location',
-      'polygon': 'Area/Boundary',
-      'polyline': 'Line/Route',
-      'multipoint': 'Multiple Points'
-    }
-    return types[type] || type
-  }
-
-  // Enhanced field value formatting
-  const formatFieldValue = (value: any, fieldName: string): string => {
-    if (value == null || value === '' || value === ' ') return '<span style="color: #999; font-style: italic;">Not Available</span>'
-    
-    const field = fieldName.toUpperCase()
-    const strValue = String(value).trim()
-    
-    // Handle boolean values
-    if (typeof value === 'boolean' || strValue.toLowerCase() === 'true' || strValue.toLowerCase() === 'false') {
-      const boolValue = typeof value === 'boolean' ? value : strValue.toLowerCase() === 'true'
-      return `<span style="color: ${boolValue ? '#28a745' : '#dc3545'}; font-weight: bold;">${boolValue ? '✓ Yes' : '✗ No'}</span>`
-    }
-
-    // Format percentages
-    if (field.includes('PERCENT') || (field.includes('CONTAIN') && !isNaN(Number(strValue)))) {
-      const num = Number(strValue)
-      if (!isNaN(num)) {
-        const color = num >= 100 ? '#28a745' : num >= 75 ? '#ffc107' : '#dc3545'
-        return `<span style="color: ${color}; font-weight: bold;">${num}%</span>`
-      }
-    }
-    
-    // Format areas and acres
-    if (field.includes('ACRES') || (field.includes('AREA') && !field.includes('CODE'))) {
-      const num = Number(strValue.replace(/,/g, ''))
-      if (!isNaN(num)) {
-        if (field.includes('ACRES')) {
-          return `<strong>${num.toLocaleString()}</strong> <span style="color: #666;">acres</span>`
-        } else {
-          return `<strong>${num.toLocaleString()}</strong> <span style="color: #666;">sq ft</span>`
-        }
-      }
-    }
-    
-    // Format dates with enhanced detection
-    if (field.includes('DATE') || field.includes('TIME') || field.includes('YEAR')) {
-      // Handle timestamp (milliseconds since epoch)
-      if (/^\d{13}$/.test(strValue)) {
-        const date = new Date(Number(strValue))
-        return `<strong>${date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>`
-      }
-      // Handle Unix timestamp (seconds since epoch)
-      if (/^\d{10}$/.test(strValue)) {
-        const date = new Date(Number(strValue) * 1000)
-        return `<strong>${date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>`
-      }
-      // Handle year only
-      if (/^\d{4}$/.test(strValue) && Number(strValue) > 1800 && Number(strValue) <= new Date().getFullYear() + 10) {
-        return `<strong>${strValue}</strong>`
-      }
-      // Handle other date formats
-      const date = new Date(strValue)
-      if (!isNaN(date.getTime()) && date.getFullYear() > 1800) {
-        return `<strong>${date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>`
-      }
-    }
-    
-    // Format phone numbers
-    if (field.includes('PHONE') || field.includes('TEL') || field.includes('FAX')) {
-      const cleaned = strValue.replace(/\D/g, '')
-      if (cleaned.length === 10) {
-        return `<a href="tel:${cleaned}" style="color: #2c5aa0; text-decoration: none; font-weight: bold;">📞 (${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}</a>`
-      } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
-        return `<a href="tel:${cleaned}" style="color: #2c5aa0; text-decoration: none; font-weight: bold;">📞 ${cleaned.slice(0, 1)} (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}</a>`
-      }
-    }
-    
-    // Format URLs and links
-    if (strValue.toLowerCase().startsWith('http://') || strValue.toLowerCase().startsWith('https://')) {
-      return `<a href="${strValue}" target="_blank" rel="noopener noreferrer" style="color: #2c5aa0; text-decoration: none; font-weight: bold;">🔗 View Link</a>`
-    }
-    
-    // Format email addresses
-    if (strValue.includes('@') && strValue.includes('.') && !strValue.includes(' ')) {
-      return `<a href="mailto:${strValue}" style="color: #2c5aa0; text-decoration: none; font-weight: bold;">✉️ ${strValue}</a>`
-    }
-    
-    // Format coordinates
-    if ((field.includes('LAT') || field.includes('LON') || field.includes('COORD')) && !isNaN(Number(strValue))) {
-      const num = Number(strValue)
-      if (Math.abs(num) <= 180) {
-        return `<code style="background: #f8f9fa; padding: 2px 4px; border-radius: 2px; font-family: monospace;">${num.toFixed(6)}°</code>`
-      }
-    }
-    
-    // Format heights and elevations
-    if (field.includes('HEIGHT') || field.includes('ELEVATION')) {
-      const num = Number(strValue.replace(/,/g, ''))
-      if (!isNaN(num)) {
-        return `<strong>${num.toLocaleString()}</strong> <span style="color: #666;">ft</span>`
-      }
-    }
-    
-    // Format capacities and large numbers
-    if ((field.includes('CAPACITY') || field.includes('ENROLLMENT') || field.includes('BEDS')) && !isNaN(Number(strValue))) {
-      const num = Number(strValue)
-      if (num > 0) {
-        return `<strong>${num.toLocaleString()}</strong>`
-      }
-    }
-    
-    // Format status fields with colors
-    if (field.includes('STATUS') || field.includes('CONDITION')) {
-      const status = strValue.toLowerCase()
-      let color = '#6c757d' // default gray
-      let icon = '⚪'
-      
-      if (status.includes('active') || status.includes('open') || status.includes('operational')) {
-        color = '#28a745'
-        icon = '🟢'
-      } else if (status.includes('inactive') || status.includes('closed') || status.includes('non-operational')) {
-        color = '#dc3545'
-        icon = '🔴'
-      } else if (status.includes('pending') || status.includes('under') || status.includes('construction')) {
-        color = '#ffc107'
-        icon = '🟡'
-      }
-      
-      return `${icon} <span style="color: ${color}; font-weight: bold;">${strValue}</span>`
-    }
-    
-    // Format codes and IDs
-    if (field.includes('CODE') || field.includes('ID') || field.includes('NUMBER')) {
-      return `<code style="background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-family: monospace; border: 1px solid #dee2e6;">${strValue}</code>`
-    }
-    
-    // Handle very long text values
-    if (strValue.length > 200) {
-      const truncated = strValue.substring(0, 197) + '...'
-      return `<div style="max-height: 60px; overflow-y: auto; background: #f8f9fa; padding: 8px; border-radius: 4px; border: 1px solid #dee2e6; font-size: 12px;">${truncated}</div>`
-    }
-    
-    // Format numeric values
-    if (!isNaN(Number(strValue)) && strValue !== '' && !field.includes('CODE') && !field.includes('ID')) {
-      const num = Number(strValue)
-      if (num > 1000) {
-        return `<strong>${num.toLocaleString()}</strong>`
-      }
-    }
-    
-    // Default formatting with proper escaping
-    const escaped = strValue.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    return `<span>${escaped}</span>`
   }
 
   useEffect(() => {
