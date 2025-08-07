@@ -474,14 +474,22 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
         view.ui.add(basemapExpand, 'top-left')
         
         // Add Legend widget
-        const legend = new Legend.default({ view })
+        const legend = new Legend.default({ 
+          view: view,
+          style: {
+            type: 'card',
+            layout: 'auto'
+          }
+        })
         const legendExpand = new Expand.default({
           view: view,
           content: legend,
           expandIcon: 'legend',
-          expandTooltip: 'Layer Legend'
+          expandTooltip: 'Layer Legend',
+          expanded: false,
+          mode: 'floating'
         })
-        view.ui.add(legendExpand, 'bottom-left')
+        view.ui.add(legendExpand, 'bottom-right')
       })
     }
 
