@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Claude Code Access & Credentials
+**IMPORTANT**: All credentials and access tokens are stored in `~/.claude/ACCESS_CREDENTIALS.md`
+- This file should exist on all machines where you use Claude Code
+- Run `~/.claude/setup-claude-env.sh` to verify access
+- Update credentials in that file when they change
+
 ## Project Overview
 
 HIFLD (Homeland Infrastructure Foundation-Level Data) search and mapping tool for discovering and visualizing critical infrastructure layers. The application allows users to search ~300 infrastructure layers, visualize them on an interactive map, and export configurations for use in ArcGIS Online.
