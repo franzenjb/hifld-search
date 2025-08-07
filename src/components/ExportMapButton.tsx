@@ -154,30 +154,17 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
         version: "2.26"
       }
 
-      // Create the full item JSON that ArcGIS Online expects
-      const itemJson = {
+      // Add metadata to the Web Map JSON
+      const webMapWithMetadata = {
+        ...webMapJson,
+        // Add metadata that ArcGIS Online will recognize
         title: mapTitle,
         snippet: mapDescription.substring(0, 250), // ArcGIS limits snippet to 250 chars
-        description: mapDescription,
-        tags: mapTags.join(','),
-        type: "Web Map",
-        typeKeywords: [
-          "ArcGIS Online",
-          "Explorer Web Map",
-          "Map",
-          "Online Map",
-          "Web Map",
-          "HIFLD"
-        ],
-        extent: extent ? [
-          [extent.xmin, extent.ymin],
-          [extent.xmax, extent.ymax]
-        ] : [[-130, 24], [-65, 50]], // Continental US as fallback
-        text: JSON.stringify(webMapJson)
+        tags: mapTags
       }
 
-      // Create blob and download
-      const blob = new Blob([JSON.stringify(itemJson, null, 2)], { type: 'application/json' })
+      // Create blob and download - export pure Web Map JSON
+      const blob = new Blob([JSON.stringify(webMapWithMetadata, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       
@@ -190,7 +177,7 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
       URL.revokeObjectURL(url)
 
       // Show success message with instructions
-      alert(`Web Map exported successfully!\n\nTo import to ArcGIS Online:\n1. Go to https://ago-assistant.esri.com/\n2. Sign in with your ArcGIS account\n3. Click "I want to..." → "Add Item"\n4. Paste the contents of ${a.download}\n5. Select Type: "Web Map"\n6. Click "Add Item"`)
+      alert(`Web Map exported successfully!\n\nTo import to ArcGIS Online:\n1. Go to your ArcGIS Online Content page\n2. Click "New item" → "Your device"\n3. Choose the downloaded ${a.download} file\n4. Select Type: "Web Map"\n5. Add tags and click "Save"\n\nAlternatively, use ArcGIS Assistant for more control.`)
       
       // Close dialog
       setShowDialog(false)
@@ -228,9 +215,9 @@ export default function ExportMapButton({ layers, viewRef }: ExportMapButtonProp
               </p>
               <ol className="list-decimal list-inside text-sm text-blue-700 space-y-1">
                 <li>Download the JSON file</li>
-                <li>Go to <span className="font-mono">ago-assistant.esri.com</span></li>
-                <li>Sign in and click &quot;Add Item&quot;</li>
-                <li>Paste the JSON and select Type: &quot;Web Map&quot;</li>
+                <li>Go to ArcGIS Online and click &quot;Content&quot;</li>
+                <li>Click &quot;New item&quot; → &quot;Your device&quot;</li>
+                <li>Select the JSON file and choose Type: &quot;Web Map&quot;</li>
               </ol>
             </div>
 
