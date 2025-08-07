@@ -14,6 +14,7 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<Layer[]>([])
   const [selectedLayers, setSelectedLayers] = useState<Layer[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [hurricaneData, setHurricaneData] = useState<any[]>([])
   const mapViewRef = useRef<MapViewRef>(null)
 
   const handleSearch = async (query: string) => {
@@ -42,6 +43,7 @@ export default function Home() {
 
   const handleClearMap = () => {
     setSelectedLayers([])
+    setHurricaneData([])
   }
 
   const handleHurricanePreset = async () => {
@@ -56,7 +58,8 @@ export default function Home() {
       const hurricanes = await fetchActiveHurricanes()
       
       if (hurricanes.length > 0) {
-        // TODO: Add hurricane visualization to map
+        // Add hurricane visualization to map
+        setHurricaneData(hurricanes)
         console.log('Active hurricanes:', hurricanes)
       }
       
@@ -99,14 +102,45 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col">
       <header className="bg-blue-600 text-white p-4 shadow-lg">
-        <div className="container mx-auto flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold mb-2">HIFLD Infrastructure Search</h1>
-            <p className="text-blue-100">Search and visualize critical infrastructure data</p>
+        <div className="container mx-auto">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold mb-2">HIFLD Infrastructure Search</h1>
+              <p className="text-blue-100">Search and visualize critical infrastructure data</p>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Emergency Presets - Smaller and less prominent */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleHurricanePreset()}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-700 text-white text-xs rounded hover:bg-blue-800 transition-colors"
+                  title="Load hurricane tracking and emergency infrastructure"
+                >
+                  <span className="text-sm">🌀</span>
+                  <span>Hurricane</span>
+                </button>
+                <button
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-700 text-white text-xs rounded opacity-50 cursor-not-allowed"
+                  disabled
+                  title="Coming soon"
+                >
+                  <span className="text-sm">🔥</span>
+                  <span>Wildfire</span>
+                </button>
+                <button
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-700 text-white text-xs rounded opacity-50 cursor-not-allowed"
+                  disabled
+                  title="Coming soon"
+                >
+                  <span className="text-sm">🌊</span>
+                  <span>Flood</span>
+                </button>
+              </div>
+              <span className="text-xs text-blue-200 border-l border-blue-500 pl-4">
+                Questions or Comments jeff.franzen2@redcross.org
+              </span>
+            </div>
           </div>
-          <span className="text-xs text-blue-200 mt-1">
-            Questions or Comments jeff.franzen2@redcross.org
-          </span>
         </div>
       </header>
 
@@ -114,41 +148,6 @@ export default function Home() {
         <aside className="w-96 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
           <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <SearchBar onSearch={handleSearch} />
-            
-            {/* Emergency Presets */}
-            <div className="mt-3">
-              <p className="text-xs text-gray-600 mb-2">Emergency Response Presets</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleHurricanePreset()}
-                  className="flex items-center justify-center gap-1 px-3 py-2 bg-orange-500 text-white text-sm rounded hover:bg-orange-600 transition-colors"
-                >
-                  <span>🌀</span>
-                  <span>Hurricane</span>
-                </button>
-                <button
-                  className="flex items-center justify-center gap-1 px-3 py-2 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors opacity-50 cursor-not-allowed"
-                  disabled
-                >
-                  <span>🔥</span>
-                  <span>Wildfire</span>
-                </button>
-                <button
-                  className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors opacity-50 cursor-not-allowed"
-                  disabled
-                >
-                  <span>🌊</span>
-                  <span>Flood</span>
-                </button>
-                <button
-                  className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors opacity-50 cursor-not-allowed"
-                  disabled
-                >
-                  <span>🌪️</span>
-                  <span>Tornado</span>
-                </button>
-              </div>
-            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto min-h-0">
@@ -203,7 +202,7 @@ export default function Home() {
         </aside>
 
         <main className="flex-1 relative">
-          <MapView ref={mapViewRef} layers={selectedLayers} />
+          <MapView ref={mapViewRef} layers={selectedLayers} hurricaneData={hurricaneData} />
         </main>
       </div>
     </div>

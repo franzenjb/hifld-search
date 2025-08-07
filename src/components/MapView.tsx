@@ -6,13 +6,14 @@ import DOMPurify from 'dompurify'
 
 interface MapViewProps {
   layers: Layer[]
+  hurricaneData?: any[]
 }
 
 export interface MapViewRef {
   getView: () => any
 }
 
-const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }, ref) {
+const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers, hurricaneData }, ref) {
   const mapDiv = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
   const viewInstance = useRef<any>(null)
@@ -340,21 +341,29 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
         })
         view.ui.add(basemapExpand, 'top-left')
         
-        // Add Legend widget
+        // Add Legend widget with fixed width
+        const legendContainer = document.createElement('div')
+        legendContainer.style.maxWidth = '300px'
+        legendContainer.style.maxHeight = '400px'
+        legendContainer.style.overflow = 'auto'
+        
         const legend = new Legend.default({ 
           view: view,
           style: {
             type: 'card',
-            layout: 'auto'
-          }
+            layout: 'stack' // Changed from 'auto' to 'stack' for vertical layout
+          },
+          container: legendContainer
         })
+        
         const legendExpand = new Expand.default({
           view: view,
           content: legend,
           expandIcon: 'legend',
           expandTooltip: 'Layer Legend',
           expanded: false,
-          mode: 'floating'
+          mode: 'floating',
+          group: 'bottom-right'
         })
         view.ui.add(legendExpand, 'bottom-right')
       })
@@ -418,6 +427,213 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(function MapView({ layers }
 
     updateLayers()
   }, [layers, createPopupTemplate])
+
+  // Handle hurricane data visualization
+  useEffect(() => {
+    const addHurricaneVisualization = async () => {
+      if (!mapInstance.current || !viewInstance.current || !hurricaneData || hurricaneData.length === 0) return
+
+      const [Graphic, GraphicsLayer, SimpleMarkerSymbol, SimpleLineSymbol, SimpleFillSymbol, TextSymbol, Font, Point, Polyline, Polygon] = await Promise.all([
+        import('@arcgis/core/Graphic'),
+        import('@arcgis/core/layers/GraphicsLayer'),
+        import('@arcgis/core/symbols/SimpleMarkerSymbol'),
+        import('@arcgis/core/symbols/SimpleLineSymbol'),
+        import('@arcgis/core/symbols/SimpleFillSymbol'),
+        import('@arcgis/core/symbols/TextSymbol'),
+        import('@arcgis/core/symbols/Font'),
+        import('@arcgis/core/geometry/Point'),
+        import('@arcgis/core/geometry/Polyline'),
+        import('@arcgis/core/geometry/Polygon')
+      ])
+
+      // Remove existing hurricane layer if any
+      const existingLayer = mapInstance.current.findLayerById('hurricane-layer')
+      if (existingLayer) {
+        mapInstance.current.remove(existingLayer)
+      }
+
+      // Create new graphics layer for hurricanes
+      const hurricaneLayer = new GraphicsLayer.default({
+        id: 'hurricane-layer',
+        title: 'Active Hurricanes'
+      })
+
+      // Add each hurricane to the map
+      hurricaneData.forEach(hurricane => {
+        // Hurricane eye symbol (red circle with white center)
+        const eyeSymbol = new SimpleMarkerSymbol.default({
+          style: 'circle',
+          size: 16,
+          color: [255, 0, 0, 0.9],
+          outline: {
+            color: [255, 255, 255, 1],
+            width: 3
+          }
+        })
+
+        // Create hurricane eye graphic
+        const eyePoint = new Point.default({
+          longitude: hurricane.lon,
+          latitude: hurricane.lat
+        })
+
+        const eyeGraphic = new Graphic.default({
+          geometry: eyePoint,
+          symbol: eyeSymbol,
+          attributes: hurricane,
+          popupTemplate: {
+            title: `${hurricane.name} - ${hurricane.category}`,
+            content: `
+              <div style="padding: 10px;">
+                <table style="width: 100%;">
+                  <tr><td><b>Status:</b></td><td>${hurricane.status}</td></tr>
+                  <tr><td><b>Wind Speed:</b></td><td>${hurricane.windSpeed} mph</td></tr>
+                  <tr><td><b>Pressure:</b></td><td>${hurricane.pressure} mb</td></tr>
+                  <tr><td><b>Movement:</b></td><td>${getDirectionName(hurricane.movementDir)} at ${hurricane.movementSpeed} mph</td></tr>
+                  <tr><td><b>Location:</b></td><td>${hurricane.lat.toFixed(1)}°N, ${Math.abs(hurricane.lon).toFixed(1)}°W</td></tr>
+                </table>
+              </div>
+            `
+          }
+        })
+
+        hurricaneLayer.add(eyeGraphic)
+
+        // Add storm name label
+        const labelSymbol = new TextSymbol.default({
+          text: hurricane.name,
+          color: [255, 255, 255, 1],
+          haloColor: [0, 0, 0, 1],
+          haloSize: 2,
+          font: new Font.default({
+            size: 14,
+            weight: 'bold'
+          }),
+          yoffset: -15
+        })
+
+        const labelGraphic = new Graphic.default({
+          geometry: eyePoint,
+          symbol: labelSymbol
+        })
+
+        hurricaneLayer.add(labelGraphic)
+
+        // Add forecast track if available
+        if (hurricane.forecastTrack && hurricane.forecastTrack.length > 1) {
+          // Create track line
+          const trackPath = hurricane.forecastTrack.map((point: any) => [point.lon, point.lat])
+          const trackLine = new Polyline.default({
+            paths: [trackPath]
+          })
+
+          const trackSymbol = new SimpleLineSymbol.default({
+            color: [255, 0, 0, 0.8],
+            width: 2,
+            style: 'dash'
+          })
+
+          const trackGraphic = new Graphic.default({
+            geometry: trackLine,
+            symbol: trackSymbol
+          })
+
+          hurricaneLayer.add(trackGraphic)
+
+          // Add forecast points
+          hurricane.forecastTrack.forEach((point: any, index: number) => {
+            if (index > 0) { // Skip current position
+              const forecastSymbol = new SimpleMarkerSymbol.default({
+                style: 'circle',
+                size: 8,
+                color: [255, 255, 255, 0.8],
+                outline: {
+                  color: [255, 0, 0, 1],
+                  width: 2
+                }
+              })
+
+              const forecastPoint = new Point.default({
+                longitude: point.lon,
+                latitude: point.lat
+              })
+
+              const forecastGraphic = new Graphic.default({
+                geometry: forecastPoint,
+                symbol: forecastSymbol
+              })
+
+              hurricaneLayer.add(forecastGraphic)
+            }
+          })
+        }
+
+        // Create wind field circles (simplified representation)
+        const windRadii = [
+          { radius: 200, color: [255, 255, 0, 0.2], name: '34kt winds' },
+          { radius: 100, color: [255, 165, 0, 0.3], name: '50kt winds' },
+          { radius: 50, color: [255, 0, 0, 0.4], name: '64kt winds' }
+        ]
+
+        windRadii.forEach(windField => {
+          const circle = new Polygon.default({
+            rings: [createCircle(hurricane.lon, hurricane.lat, windField.radius)]
+          })
+
+          const windSymbol = new SimpleFillSymbol.default({
+            color: windField.color,
+            outline: {
+              color: windField.color.slice(0, 3).concat([0.8]),
+              width: 1
+            }
+          })
+
+          const windGraphic = new Graphic.default({
+            geometry: circle,
+            symbol: windSymbol
+          })
+
+          hurricaneLayer.add(windGraphic)
+        })
+      })
+
+      // Add layer to map
+      mapInstance.current.add(hurricaneLayer)
+
+      // Zoom to first hurricane if exists
+      if (hurricaneData.length > 0) {
+        const firstHurricane = hurricaneData[0]
+        viewInstance.current.goTo({
+          center: [firstHurricane.lon, firstHurricane.lat],
+          zoom: 6
+        })
+      }
+    }
+
+    addHurricaneVisualization()
+
+    // Helper function to get compass direction
+    function getDirectionName(degrees: number): string {
+      const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+      const index = Math.round(degrees / 22.5) % 16
+      return directions[index]
+    }
+
+    // Helper function to create circle coordinates
+    function createCircle(centerLon: number, centerLat: number, radiusMiles: number, points = 64): number[][] {
+      const coords: number[][] = []
+      const radiusDegrees = radiusMiles / 69 // Rough conversion miles to degrees
+      
+      for (let i = 0; i <= points; i++) {
+        const angle = (i / points) * 2 * Math.PI
+        const lon = centerLon + radiusDegrees * Math.cos(angle) / Math.cos(centerLat * Math.PI / 180)
+        const lat = centerLat + radiusDegrees * Math.sin(angle)
+        coords.push([lon, lat])
+      }
+      
+      return coords
+    }
+  }, [hurricaneData])
 
   return (
     <div className="relative h-full">
