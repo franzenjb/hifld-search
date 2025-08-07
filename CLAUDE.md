@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-HIFLD (Homeland Infrastructure Foundation-Level Data) search and mapping tool for discovering and visualizing critical infrastructure layers. The application allows users to search ~200 infrastructure layers, visualize them on an interactive map, and export configurations for later use in ArcGIS Online.
+HIFLD (Homeland Infrastructure Foundation-Level Data) search and mapping tool for discovering and visualizing critical infrastructure layers. The application allows users to search ~300 infrastructure layers, visualize them on an interactive map, and export configurations for use in ArcGIS Online.
 
 ## Development Commands
 
@@ -38,6 +38,24 @@ vercel
 2. Vercel auto-deploys from main branch
 3. Deployment takes 2-3 minutes
 
+**File Editing Rule**: Always provide complete file replacements, never partial edits. This is a strict requirement from the user.
+
+## Project Structure
+
+```
+/
+├── src/                    # Next.js application source
+│   ├── app/               # App router pages and API routes
+│   ├── components/        # React components
+│   ├── lib/              # Utility functions
+│   └── middleware.ts     # Request middleware
+├── public/                # Static assets
+│   └── HIFLD_Open_Crosswalk_Geoplatform.csv  # Layer metadata
+├── docs/                  # Documentation
+├── python-prototypes/     # Python proof-of-concept scripts
+└── prototypes/           # HTML/JS prototypes
+```
+
 ## Environment Configuration
 
 Required `.env.local` variables:
@@ -60,95 +78,101 @@ APP_PASSWORD=your_secure_password_here
 - **Mapping**: @arcgis/core 4.28
 - **Data Processing**: PapaParse for CSV parsing
 - **HTTP Client**: Axios for API requests
+- **Deployment**: Vercel (auto-deploy on push)
 
 ### Core Data Flow
 
-1. **Layer Discovery**: CSV file (`/public/HIFLD_Open_Crosswalk_Geoplatform.csv`) contains ~200 infrastructure layers with metadata
-2. **Search**: User searches layers → filtered by availability of `Open REST Service` URL
-3. **Map Addition**: Selected layers added as ArcGIS FeatureLayers to the map
-4. **Interaction**: Popups show raw feature data, widgets provide map controls
-5. **Export**: Two paths - JSON download or direct save to ArcGIS Online
+1. **Layer Discovery**: CSV file (`/public/HIFLD_Open_Crosswalk_Geoplatform.csv`) contains infrastructure layer metadata
+2. **Search**: User searches → `searchLayers()` filters by layer name and service URL availability
+3. **Map Display**: Selected layers → ArcGIS FeatureLayers → Added to MapView
+4. **Interaction**: Click features → Popup shows raw attribute data
+5. **Export Options**:
+   - **Export to ArcGIS**: Downloads Web Map JSON for manual import
+   - **Save to ArcGIS**: Direct save using ArcGIS authentication
 
 ### Component Architecture
 
 ```
-page.tsx (orchestrator)
-    ├── PasswordProtection.tsx (wrapper)
-    ├── SearchBar.tsx → lib/search.ts
-    ├── SearchResults.tsx
-    ├── MapView.tsx (forwardRef)
-    │   ├── Dynamic ArcGIS module imports
-    │   ├── Popup templates (raw data display)
-    │   └── Widgets (BasemapGallery, Legend, Search, Home)
-    ├── ExportMapButton.tsx (JSON download)
-    └── SaveMapButton.tsx (ArcGIS Online save)
+app/page.tsx (main orchestrator)
+    ├── PasswordProtection.tsx (authentication wrapper)
+    ├── SearchBar.tsx → lib/search.ts → CSV parsing
+    ├── SearchResults.tsx (displays filtered layers)
+    ├── MapView.tsx (forwardRef to expose view)
+    │   ├── Dynamic ArcGIS imports (performance)
+    │   ├── Raw data popups (all fields shown)
+    │   └── Widgets:
+    │       ├── BasemapGallery (top-left)
+    │       ├── Legend (bottom-right)
+    │       ├── Search (top-right)
+    │       └── Home (top-left)
+    ├── ExportMapButton.tsx (Web Map JSON export)
+    └── SaveMapButton.tsx (ArcGIS Online integration)
 ```
 
 ### State Management
-- All state managed in `page.tsx` using React hooks
-- `selectedLayers`: Array of active layers on map
-- `mapViewRef`: Reference to ArcGIS view for export/save operations
-- Components communicate via props and callbacks
+- All state in `page.tsx` using React hooks
+- Key state: `selectedLayers`, `searchResults`, `mapViewRef`
+- Props/callbacks for component communication
+- No external state management library
 
-### Authentication Flow
-1. `PasswordProtection.tsx` checks for `hifld-auth` cookie
-2. If missing, shows password form
-3. On success, sets HTTP-only cookie (7-day expiration)
-4. `middleware.ts` protects `/api/*` routes using same cookie
+### Authentication & Security
+1. **App Access**: Password protection via `PasswordProtection.tsx`
+   - HTTP-only cookie: `hifld-auth=authenticated`
+   - 7-day expiration
+   - Middleware validates API routes
+2. **ArcGIS Auth**: OAuth for SaveMapButton functionality
+   - Immediate mode authentication
+   - Token stored in ArcGIS IdentityManager
 
-## Recent Architecture Changes
+### Popup System
+- **Current Design**: Raw data table showing ALL fields
+- **Purpose**: Debug layer data availability issues
+- **Format**: Monospace font, color-coded by field type
+- **No filtering**: Shows empty values, system fields, everything
 
-### Popup System Evolution
-- Started with field-specific popups (showing select fields)
-- Evolved to category-based system (11 categories, rich formatting)
-- Current: Raw data display showing ALL fields unfiltered for debugging
-
-### Export Functionality
-- Creates Web Map JSON compatible with ArcGIS Online
-- Note: Direct upload via "New item → Your device" doesn't work
-- Users should use ArcGIS Online Assistant or Python API instead
-
-### Widget Configuration
-- **BasemapGallery**: Top-left, expandable
-- **Legend**: Bottom-right, expandable, card style
-- **Search**: Top-right corner
-- **Home**: Top-left below BasemapGallery
+### Export/Import Workflow
+**Export creates Web Map JSON but standard ArcGIS import doesn't work**
+- Use ArcGIS Online Assistant (ago-assistant.esri.com)
+- Or ArcGIS Python API
+- Direct file upload method fails
 
 ## Data Schema (CSV)
 
-Critical columns for functionality:
+Critical columns:
 - `Layer Name`: Primary search field
-- `Open REST Service`: Map service URL (null = no map available)
-- `Agency`: Data provider for attribution
-- `Status`: Active/Migrated
+- `Open REST Service`: Map service URL (required for display)
+- `Agency`: Data provider attribution
+- `Status`: Active/Migrated indicator
 - `DUA Required`: Data Use Agreement flag
 - `GII Access Required`: Restricted access flag
 
-## Known Issues & Workarounds
+## Known Issues & Current State
 
-### Popup Data Display
-Some layers (e.g., State Capitols, Prison Boundaries) show minimal data. Current popup system shows raw attributes to help debug why certain layers have limited fields.
+### Limited Popup Data
+Many layers show minimal attributes (e.g., State Capitols only shows FTYPE: 830). This is a data issue, not a code issue.
 
-### Export to ArcGIS Online
-The exported JSON requires manual import via:
-- ArcGIS Online Assistant (ago-assistant.esri.com)
-- ArcGIS Python API in notebooks
-- Custom OAuth application
+### CORS & Authentication
+Some layers fail to load due to:
+- CORS restrictions on service endpoints
+- DUA/GII authentication requirements
+- Service downtime or migration
 
-### Layer Loading
-Some layers may fail due to:
-- CORS restrictions
-- Authentication requirements (DUA/GII)
-- Service availability
+### Performance Considerations
+- CSV loaded on every search (134KB)
+- No layer caching implemented
+- All widgets load on map init
+
+## Recent Changes Log
+- Removed geometry debug info from popups (coordinates, vertex counts)
+- Simplified popup to show raw attribute table
+- Fixed Legend widget visibility (moved to bottom-right)
+- Fixed JSON export format for ArcGIS compatibility
+- Added BasemapGallery widget
 
 ## Deployment
 
-- GitHub repository: `https://github.com/franzenjb/hifld-search`
-- Vercel auto-deploys on push to main branch
-- Environment variables must be set in Vercel dashboard
-- Deployment typically completes in 2-3 minutes
-- Region: IAD1 (US East)
-
-## User Requirements
-
-**IMPORTANT**: Always provide complete file replacements, never partial edits. This is a strict requirement from the user.
+- **Repository**: https://github.com/franzenjb/hifld-search
+- **Deployment**: Vercel (auto-deploy from main branch)
+- **Region**: IAD1 (US East)
+- **Build time**: ~30 seconds
+- **Deploy time**: 2-3 minutes total
