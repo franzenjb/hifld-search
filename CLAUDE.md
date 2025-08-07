@@ -176,3 +176,13 @@ Some layers fail to load due to:
 - **Region**: IAD1 (US East)
 - **Build time**: ~30 seconds
 - **Deploy time**: 2-3 minutes total
+
+## Troubleshooting Memories
+
+### Localhost Connection Issues
+- NEVER NEVER release a http://localhost that does not work to me  This site can't be reached
+- localhost refused to connect.
+- Try:
+  - Checking the connection
+  - Checking the proxy and the firewall
+  - ERR_CONNECTION_REFUSED
